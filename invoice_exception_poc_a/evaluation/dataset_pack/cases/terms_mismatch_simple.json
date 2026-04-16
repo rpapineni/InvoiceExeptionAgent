@@ -1,0 +1,41 @@
+{
+  "case_id": "EVAL-TERMS-001",
+  "case_description": "Invoice payment terms conflict with PO and vendor standard terms while other anchors align.",
+  "coverage_bucket": "simple_obvious",
+  "coverage_notes": "Simple obvious terms mismatch with stable vendor and amount anchors.",
+  "expected_outcome": {
+    "primary_exception_type": "terms_mismatch",
+    "likely_owner": "ap_analyst"
+  },
+  "input_payload": {
+    "case_id": "EVAL-TERMS-001",
+    "invoice": {
+      "invoice_number": "INV-TERMS-001",
+      "vendor_name": "Delta Office Supply",
+      "invoice_amount": 300.0,
+      "currency": "USD",
+      "payment_terms": "NET_10"
+    },
+    "po_summary": {
+      "po_number": "PO-TERMS-001",
+      "buyer_name": "Office Procurement",
+      "po_amount": 300.0,
+      "currency": "USD",
+      "line_summary": "Office materials",
+      "payment_terms": "NET_45"
+    },
+    "vendor_master": {
+      "vendor_id": "V-DELTA-001",
+      "vendor_name": "Delta Office Supply",
+      "payment_terms": "NET_45",
+      "payment_method": "ACH",
+      "vendor_status": "ACTIVE"
+    },
+    "policy_rules": {
+      "tolerance_threshold_percent": 5.0,
+      "tolerance_threshold_amount": 25.0,
+      "routing_guidance": "Route payment-term variances to AP analyst review.",
+      "policy_anchor_reference": "POL-TERMS-001"
+    }
+  }
+}

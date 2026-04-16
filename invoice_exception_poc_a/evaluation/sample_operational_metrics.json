@@ -1,0 +1,23 @@
+{
+  "total_cases": 3,
+  "average_latency_per_case": {
+    "value": 2.5,
+    "note": "Average latency was computed from run_metadata.latency_ms."
+  },
+  "average_retries_per_case": {
+    "value": 0.333,
+    "note": "Average retries were computed from run_metadata.retry_count."
+  },
+  "average_token_or_compute_usage_per_case": {
+    "value": null,
+    "note": "Token usage is unavailable in the current local stack; compute usage placeholders were present but non-numeric."
+  },
+  "valid_structured_output_rate": {
+    "value": 0.667,
+    "note": "Rate is based on validation_status values of valid or repaired_valid."
+  },
+  "estimated_analyst_time_saved": {
+    "value": null,
+    "note": "Estimated analyst time saved is a manual or external estimate at this stage and is not automatically computed."
+  }
+}

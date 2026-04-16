@@ -1,0 +1,67 @@
+{
+  "package_name": "poc_a_submission_package_skeleton",
+  "package_version": "1.0.0",
+  "purpose": "Reusable PoC A submission-package skeleton for implementation handoff and cross-team comparison.",
+  "sections": [
+    {
+      "section_id": "architecture_overview",
+      "file": "architecture_overview.md",
+      "linked_artifact": null
+    },
+    {
+      "section_id": "workflow_diagram",
+      "file": "workflow_diagram.md",
+      "linked_artifact": null
+    },
+    {
+      "section_id": "assumptions_and_exclusions",
+      "file": "assumptions_and_exclusions.md",
+      "linked_artifact": null
+    },
+    {
+      "section_id": "input_contract",
+      "file": "input_contract.md",
+      "linked_artifact": "invoice_exception_poc_a/intake/contract.py"
+    },
+    {
+      "section_id": "output_contract",
+      "file": "output_contract.md",
+      "linked_artifact": "invoice_exception_poc_a/schema/model.py"
+    },
+    {
+      "section_id": "validation_and_trace_summary",
+      "file": "validation_and_trace_summary.md",
+      "linked_artifact": "invoice_exception_poc_a/schema/validation.py"
+    },
+    {
+      "section_id": "evaluation_dataset_summary",
+      "file": "evaluation_dataset_summary.md",
+      "linked_artifact": "invoice_exception_poc_a/evaluation/dataset_pack/manifest.json"
+    },
+    {
+      "section_id": "business_quality_scoring_summary",
+      "file": "business_quality_scoring_summary.md",
+      "linked_artifact": "invoice_exception_poc_a/evaluation/scoring.py"
+    },
+    {
+      "section_id": "operational_metrics_summary",
+      "file": "operational_metrics_summary.md",
+      "linked_artifact": "invoice_exception_poc_a/evaluation/operational_metrics.py"
+    },
+    {
+      "section_id": "acceptance_report_summary",
+      "file": "acceptance_report_summary.md",
+      "linked_artifact": "invoice_exception_poc_a/evaluation/acceptance_report.py"
+    },
+    {
+      "section_id": "test_results_summary",
+      "file": "test_results_summary.md",
+      "linked_artifact": "tests/test_main.py"
+    },
+    {
+      "section_id": "business_findings_and_limitations",
+      "file": "business_findings_and_limitations.md",
+      "linked_artifact": null
+    }
+  ]
+}

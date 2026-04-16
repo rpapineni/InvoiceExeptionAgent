@@ -1,0 +1,35 @@
+{
+  "implementation_id": "poc_a_reference_python",
+  "criteria": {
+    "A1_one_case_in_one_triage_out_flow_is_clear_and_bounded": {
+      "score": 5,
+      "passed": true,
+      "evidence": "CLI and intake path accept one case per invocation and reject multi-case payloads."
+    },
+    "A2_output_schema_is_valid_and_stable": {
+      "score": 5,
+      "passed": true,
+      "evidence": "Output schema is validated with explicit validation status and bounded repair metadata."
+    },
+    "A3_recommendation_is_understandable_to_ap_analyst": {
+      "score": 4,
+      "passed": true,
+      "evidence": "Reason summary, owner recommendation, and reviewer guidance are all expressed in business-readable language."
+    },
+    "A4_system_remains_within_bounded_retry_repair_envelope": {
+      "score": 5,
+      "passed": true,
+      "evidence": "Retry count remains bounded at zero and schema repair is limited to a single deterministic pass."
+    },
+    "A5_no_unintended_downstream_automation": {
+      "score": 5,
+      "passed": true,
+      "evidence": "Guardrails explicitly block routing, approval, payment, and outbound communication actions."
+    },
+    "A6_run_trace_and_audit_record_are_available": {
+      "score": 5,
+      "passed": true,
+      "evidence": "Run metadata and bounded execution trace are emitted in every output payload."
+    }
+  }
+}

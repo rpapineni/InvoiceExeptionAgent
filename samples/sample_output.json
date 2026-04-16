@@ -1,0 +1,82 @@
+{
+  "case_id": "CASE-POCA-001",
+  "exception_type": "receiving_mismatch",
+  "reason_summary": "Receiving context shows status 'PARTIAL_RECEIPT' while the PO still carries quantity expectations, so the case is best treated as a receiving mismatch.",
+  "recommended_owner": "receiving_operations",
+  "priority": "medium",
+  "next_actions": [
+    "Review receipt status and any receiving documents tied to the PO.",
+    "Confirm whether goods or services were fully received before invoice matching.",
+    "Prepare the receiving discrepancy for review by receiving operations."
+  ],
+  "questions_for_reviewer": [
+    "Were the goods or services fully received for this invoice?",
+    "Is receiving data missing or inconsistent with the PO expectations?"
+  ],
+  "confidence": "high",
+  "run_id": "RUN-PLACEHOLDER-001",
+  "workflow_version": "0.1.0",
+  "prompt_version": "placeholder-prompt-v1",
+  "app_env": "local",
+  "schema_version": "1.0.0",
+  "validation_status": "valid",
+  "validation_errors": [],
+  "repair_attempted": false,
+  "repair_count": 0,
+  "run_metadata": {
+    "case_id": "CASE-POCA-001",
+    "run_id": "RUN-PLACEHOLDER-001",
+    "run_started_at": "2026-01-01T00:00:00+00:00",
+    "workflow_version": "0.1.0",
+    "prompt_version": "placeholder-prompt-v1",
+    "app_env": "local",
+    "retry_count": 0,
+    "latency_ms": 12.345,
+    "token_usage": null,
+    "compute_usage": null,
+    "validation_status": "valid",
+    "repair_count": 0
+  },
+  "execution_trace": [
+    {
+      "stage": "intake",
+      "status": "completed",
+      "note": "Loaded one validated case envelope."
+    },
+    {
+      "stage": "normalization",
+      "status": "completed",
+      "note": "Normalized canonical case facts."
+    },
+    {
+      "stage": "classification",
+      "status": "completed",
+      "note": "Selected exception type 'receiving_mismatch'."
+    },
+    {
+      "stage": "reason_summary",
+      "status": "completed",
+      "note": "Generated business-readable summary."
+    },
+    {
+      "stage": "recommendation",
+      "status": "completed",
+      "note": "Recommended owner 'receiving_operations' with priority 'medium'."
+    },
+    {
+      "stage": "guidance",
+      "status": "completed",
+      "note": "Prepared 3 actions and 2 questions."
+    },
+    {
+      "stage": "schema_validation",
+      "status": "completed",
+      "note": "Output matched the formal schema."
+    },
+    {
+      "stage": "output_assembly",
+      "status": "completed",
+      "note": "Assembled bounded output payload."
+    }
+  ]
+}

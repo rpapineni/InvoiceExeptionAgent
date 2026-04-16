@@ -1,0 +1,44 @@
+{
+  "case_id": "EVAL-MISSINGPO-001",
+  "case_description": "Invoice appears to be PO-backed but only carries an unusable placeholder reference.",
+  "coverage_bucket": "simple_obvious",
+  "coverage_notes": "Simple obvious missing-PO case represented with a structurally valid but unusable PO anchor.",
+  "expected_outcome": {
+    "primary_exception_type": "missing_po",
+    "likely_owner": "buyer_procurement"
+  },
+  "input_payload": {
+    "case_id": "EVAL-MISSINGPO-001",
+    "invoice": {
+      "invoice_number": "INV-MISSINGPO-001",
+      "vendor_name": "Beacon Industrial",
+      "invoice_amount": 480.0,
+      "currency": "USD",
+      "payment_terms": "NET_15"
+    },
+    "po_summary": {
+      "po_number": "UNAVAILABLE-PO",
+      "buyer_name": "Factory Procurement",
+      "po_amount": 480.0,
+      "currency": "USD",
+      "line_summary": "Consumable supplies"
+    },
+    "vendor_master": {
+      "vendor_id": "V-BEACON-001",
+      "vendor_name": "Beacon Industrial",
+      "payment_terms": "NET_15",
+      "payment_method": "ACH",
+      "vendor_status": "ACTIVE"
+    },
+    "policy_rules": {
+      "tolerance_threshold_percent": 5.0,
+      "tolerance_threshold_amount": 50.0,
+      "routing_guidance": "Escalate unresolved PO anchor issues to buyer procurement.",
+      "policy_anchor_reference": "POL-MISSINGPO-001"
+    },
+    "prior_analyst_notes": {
+      "note_summary": "Invoice should be PO-backed but no usable PO number was provided.",
+      "note_reference": "NOTE-MISSINGPO-001"
+    }
+  }
+}

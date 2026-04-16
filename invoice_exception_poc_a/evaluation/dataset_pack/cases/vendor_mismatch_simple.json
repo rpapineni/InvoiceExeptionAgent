@@ -1,0 +1,41 @@
+{
+  "case_id": "EVAL-VENDOR-001",
+  "case_description": "Invoice vendor name differs from the approved supplier on the PO and vendor master.",
+  "coverage_bucket": "simple_obvious",
+  "coverage_notes": "Simple obvious vendor identity conflict with stable amount and terms anchors.",
+  "expected_outcome": {
+    "primary_exception_type": "vendor_mismatch",
+    "likely_owner": "vendor_management"
+  },
+  "input_payload": {
+    "case_id": "EVAL-VENDOR-001",
+    "invoice": {
+      "invoice_number": "INV-VENDOR-001",
+      "vendor_name": "North Ridge Billing Services",
+      "invoice_amount": 900.0,
+      "currency": "USD",
+      "payment_terms": "NET_30"
+    },
+    "po_summary": {
+      "po_number": "PO-VENDOR-001",
+      "buyer_name": "Corporate Procurement",
+      "po_amount": 900.0,
+      "currency": "USD",
+      "line_summary": "Annual support services",
+      "expected_vendor": "North Ridge Technologies"
+    },
+    "vendor_master": {
+      "vendor_id": "V-NORTHRIDGE-001",
+      "vendor_name": "North Ridge Technologies",
+      "payment_terms": "NET_30",
+      "payment_method": "WIRE",
+      "vendor_status": "ACTIVE"
+    },
+    "policy_rules": {
+      "tolerance_threshold_percent": 5.0,
+      "tolerance_threshold_amount": 100.0,
+      "routing_guidance": "Route vendor identity discrepancies to vendor management.",
+      "policy_anchor_reference": "POL-VENDOR-001"
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "dataset_name": "poc_a_evaluation_dataset_pack",
+  "dataset_version": "1.0.0",
+  "purpose": "Reusable evaluation dataset pack for comparing PoC A implementations across simple, ambiguous, and edge-case invoice exception scenarios.",
+  "coverage_buckets": [
+    "simple_obvious",
+    "moderately_ambiguous",
+    "edge_low_data"
+  ],
+  "cases": [
+    {
+      "case_id": "EVAL-AMOUNT-001",
+      "case_file": "amount_mismatch_simple.json",
+      "coverage_bucket": "simple_obvious",
+      "expected_primary_exception_type": "amount_mismatch",
+      "expected_likely_owner": "ap_analyst"
+    },
+    {
+      "case_id": "EVAL-MISSINGPO-001",
+      "case_file": "missing_po_simple.json",
+      "coverage_bucket": "simple_obvious",
+      "expected_primary_exception_type": "missing_po",
+      "expected_likely_owner": "buyer_procurement"
+    },
+    {
+      "case_id": "EVAL-VENDOR-001",
+      "case_file": "vendor_mismatch_simple.json",
+      "coverage_bucket": "simple_obvious",
+      "expected_primary_exception_type": "vendor_mismatch",
+      "expected_likely_owner": "vendor_management"
+    },
+    {
+      "case_id": "EVAL-TERMS-001",
+      "case_file": "terms_mismatch_simple.json",
+      "coverage_bucket": "simple_obvious",
+      "expected_primary_exception_type": "terms_mismatch",
+      "expected_likely_owner": "ap_analyst"
+    },
+    {
+      "case_id": "EVAL-RECEIVING-001",
+      "case_file": "receiving_mismatch_simple.json",
+      "coverage_bucket": "simple_obvious",
+      "expected_primary_exception_type": "receiving_mismatch",
+      "expected_likely_owner": "receiving_operations"
+    },
+    {
+      "case_id": "EVAL-POLICY-001",
+      "case_file": "policy_tolerance_breach_simple.json",
+      "coverage_bucket": "simple_obvious",
+      "expected_primary_exception_type": "policy_tolerance_breach",
+      "expected_likely_owner": "finance_controller"
+    },
+    {
+      "case_id": "EVAL-LOWDATA-001",
+      "case_file": "insufficient_information_edge.json",
+      "coverage_bucket": "edge_low_data",
+      "expected_primary_exception_type": "insufficient_information",
+      "expected_likely_owner": "exception_review_queue"
+    },
+    {
+      "case_id": "EVAL-AMBIG-001",
+      "case_file": "mixed_signal_ambiguous.json",
+      "coverage_bucket": "moderately_ambiguous",
+      "expected_primary_exception_type": "vendor_mismatch",
+      "expected_likely_owner": "vendor_management"
+    }
+  ]
+}
