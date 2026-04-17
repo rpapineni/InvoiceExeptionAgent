@@ -30,6 +30,7 @@
     "workflow_version": "0.1.0",
     "prompt_version": "placeholder-prompt-v1",
     "app_env": "local",
+    "triage_engine": "deterministic",
     "retry_count": 0,
     "latency_ms": 12.345,
     "token_usage": null,
@@ -38,6 +39,11 @@
     "repair_count": 0
   },
   "execution_trace": [
+    {
+      "stage": "triage_engine_selection",
+      "status": "completed",
+      "note": "Selected triage engine 'deterministic'."
+    },
     {
       "stage": "intake",
       "status": "completed",

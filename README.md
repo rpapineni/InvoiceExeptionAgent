@@ -209,6 +209,128 @@ PoC A also includes a reusable submission-package skeleton for implementation ha
 - Existing artifacts are referenced in the package where appropriate instead of duplicating implementation logic
 - The package remains implementation-neutral, template-driven, and does not invent final findings or cross-team comparison content
 
+## Frontier Branching Strategy
+
+PoC A deterministic baseline work and PoC A-F frontier-assisted work must coexist as separate tracks so the bounded control implementation remains comparable.
+
+Recommended branch roles:
+
+- `release/poc-a-deterministic-baseline`: deterministic control branch
+- `feature/poc-a-frontier-assisted`: frontier-assisted development branch
+
+Operational note:
+
+- The current repository is already on a stable PoC A baseline, so only `feature/poc-a-frontier-assisted` may need to be created operationally.
+- The intended two-track model still remains baseline plus frontier, even if the current stable branch is `main`.
+
+CODEX working rules for frontier development:
+
+- Do not modify the baseline branch during frontier work
+- Implement frontier changes only on `feature/poc-a-frontier-assisted`
+- Preserve deterministic mode even on the frontier branch
+- Add a mode switch rather than replacing deterministic logic
+- Keep the same input contract, output contract, validation, trace, and evaluation structure
+- Treat frontier behavior as a bounded judgment layer only
+- Do not introduce memory, downstream action, or PoC B behavior
+
+Merge policy:
+
+- Baseline fixes may be cherry-picked or merged carefully into the frontier branch
+- Frontier experiments do not flow back into baseline automatically
+- Deterministic baseline behavior must remain reviewable and intact
+
+Reference ADR:
+
+- [ADR-0002-poc-a-frontier-branching-strategy.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0002-poc-a-frontier-branching-strategy.md)
+
+## Triage Engine Selection
+
+PoC A now includes a configurable triage engine seam so the same bounded workflow can run in deterministic or frontier-assisted mode without changing contracts or control layers.
+
+- `TRIAGE_ENGINE` is the selector setting
+- Allowed values are `deterministic` and `frontier`
+- The default is `deterministic`
+- Deterministic mode keeps the current control behavior unchanged
+- Frontier mode is currently a stub path that is selectable and explicitly marked in trace/metadata, but it does not add provider integration or frontier inference yet
+- The selected engine is surfaced in `run_metadata.triage_engine` and the execution trace
+- Input contract, output contract, validation, trace, and evaluation structure remain the same across both modes
+
+## PoC A-F Architecture Boundary
+
+PoC A-F keeps deterministic layers in control of orchestration, contracts, validation, bounded repair, metadata, execution trace, evaluation assets, scoring/reporting structures, and guardrails/workflow control.
+
+The frontier layer owns only bounded judgment generation for triage fields such as exception classification, reason summary, owner recommendation, priority, next actions, reviewer questions, and confidence.
+
+PoC A-F frontier assistance is not autonomous workflow execution. It does not introduce cross-case memory, reuse of prior corrections, learning loops, autonomous routing, ERP posting, payment approval or rejection, outbound communications, uncontrolled tool usage, or PoC B learning behavior.
+
+Reference ADR:
+
+- [ADR-0003-poc-a-f-architectural-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0003-poc-a-f-architectural-boundary.md)
+
+## Frontier Adapter Layer
+
+PoC A-F now reserves a provider-agnostic frontier adapter layer so provider access stays outside business modules.
+
+- The adapter layer owns provider-specific request/response handling only
+- Business and orchestration modules must not call provider SDKs directly
+- A stub adapter is available for safe local tests and non-provider runs
+- An OpenAI adapter seam exists as the first concrete provider target without wiring live inference into the bounded workflow yet
+
+## Frontier Provider Configuration
+
+Frontier provider settings are externalized so later provider wiring can happen without code edits.
+
+- `FRONTIER_PROVIDER` selects the frontier adapter provider and currently allows `stub` or `openai`
+- `FRONTIER_MODEL` supplies the provider model identifier for frontier mode
+- `FRONTIER_TIMEOUT_MS`, `FRONTIER_MAX_RETRIES`, `FRONTIER_TEMPERATURE`, and `FRONTIER_MAX_OUTPUT_TOKENS` use safe defaults when omitted
+- `OPENAI_API_KEY` may be present for later OpenAI runs, but live credentials are not required for tests
+- Deterministic mode does not require any frontier provider settings
+- Frontier mode fails clearly when provider or model settings are missing or invalid
+
+## Frontier Prompt Contract
+
+PoC A-F now has a strict, versioned frontier triage prompt contract that packages normalized facts plus uncertainty signals into a provider-agnostic prompt payload.
+
+- The prompt contract requires JSON-only output with the same bounded PoC A triage fields
+- Allowed enum values for exception type, owner, priority, and confidence are embedded in the contract
+- The prompt explicitly forbids unsupported claims, downstream action language, memory or cross-case references, and uncontrolled behavior
+- The prompt builder is testable without live provider calls and is ready for later adapter wiring
+
+## Frontier Trace Contract
+
+Frontier runs emit concise bounded trace stages for prompt build, adapter call, output parsing, and frontier generation.
+
+- Frontier trace notes stay short and operational
+- Failure paths emit a failed stage at the relevant frontier step
+- Trace does not include prompt bodies, full provider payloads, or hidden reasoning
+
+## Shared Validation Reuse
+
+After frontier output is parsed and normalized, it flows through the same shared PoC A schema validation and bounded repair layer used by deterministic runs.
+
+- Validation status remains `valid`, `repaired_valid`, or `failed`
+- Repair count and validation metadata stay comparable across deterministic and frontier engines
+- Missing business content is not fabricated during repair
+
+## Dual-Run Comparison
+
+PoC A-F now includes a lightweight comparison runner that executes the same evaluation dataset cases in deterministic and frontier modes and stores side-by-side outputs in a reusable structure.
+
+- Comparison records preserve `case_id` and `coverage_bucket`
+- Deterministic and frontier outputs are kept as separate payloads for the same case
+- Stub frontier mode works through the runner without live credentials
+- The runner is intended for later scoring, metrics comparison, and demo preparation
+
+## Frontier Demo Case Set
+
+PoC A-F now includes a small four-case demo set for stakeholder walkthroughs. The selected cases are documented in `invoice_exception_poc_a/evaluation/frontier_demo_case_set.json`.
+
+- `samples/sample_case.json` highlights a clean receiving mismatch happy path
+- `invoice_exception_poc_a/evaluation/dataset_pack/cases/missing_po_simple.json` shows an obvious missing-PO exception
+- `invoice_exception_poc_a/evaluation/dataset_pack/cases/mixed_signal_ambiguous.json` is the best side-by-side ambiguity case
+- `invoice_exception_poc_a/evaluation/dataset_pack/cases/insufficient_information_edge.json` shows bounded low-information behavior
+- Each entry includes the exact runnable path, why the case is included, and what the demo audience should notice
+
 ## Current status
 
 This implementation is a scaffold only. It provides structure, placeholders, and a minimal single-case execution path so later stories can be added without changing the bounded project shape.

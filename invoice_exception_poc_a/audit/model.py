@@ -15,6 +15,7 @@ class RunMetadata:
     workflow_version: str
     prompt_version: str
     app_env: str
+    triage_engine: str
     retry_count: int
     latency_ms: float
     token_usage: int | None

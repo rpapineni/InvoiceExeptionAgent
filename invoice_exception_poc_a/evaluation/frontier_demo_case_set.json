@@ -1,0 +1,38 @@
+{
+  "demo_case_set_name": "poc_a_f_frontier_demo_case_set",
+  "purpose": "Stakeholder-friendly four-case set for deterministic versus frontier-assisted PoC A-F demo runs.",
+  "cases": [
+    {
+      "case_id": "CASE-POCA-001",
+      "file_path": "samples/sample_case.json",
+      "coverage_category": "happy_path_receiving_mismatch",
+      "comparison_emphasis": "side_by_side",
+      "why_included": "Shows a clean successful end-to-end run through the bounded workflow using the sample receiving mismatch scenario.",
+      "what_to_notice": "The run completes cleanly with a receiving mismatch outcome, schema-aligned output, bounded validation metadata, and concise execution trace."
+    },
+    {
+      "case_id": "EVAL-MISSINGPO-001",
+      "file_path": "invoice_exception_poc_a/evaluation/dataset_pack/cases/missing_po_simple.json",
+      "coverage_category": "missing_po",
+      "comparison_emphasis": "deterministic_or_side_by_side",
+      "why_included": "Shows an obvious invoice exception where the PO anchor is unusable and the likely owner recommendation should be straightforward.",
+      "what_to_notice": "Both engines should identify the missing PO scenario clearly and keep the output reviewer-oriented without drifting into downstream action language."
+    },
+    {
+      "case_id": "EVAL-AMBIG-001",
+      "file_path": "invoice_exception_poc_a/evaluation/dataset_pack/cases/mixed_signal_ambiguous.json",
+      "coverage_category": "mixed_signal_ambiguous",
+      "comparison_emphasis": "frontier_or_side_by_side",
+      "why_included": "Shows a mixed-signal case where more than one issue looks plausible, making it the best discussion point for frontier-assisted judgment under ambiguity.",
+      "what_to_notice": "This is the strongest side-by-side case for discussing how each engine handles conflicting signals while staying inside the same bounded schema and trace contract."
+    },
+    {
+      "case_id": "EVAL-LOWDATA-001",
+      "file_path": "invoice_exception_poc_a/evaluation/dataset_pack/cases/insufficient_information_edge.json",
+      "coverage_category": "insufficient_information_low_data",
+      "comparison_emphasis": "side_by_side",
+      "why_included": "Shows bounded behavior when core triage anchors are incomplete and the system should stay cautious instead of over-claiming.",
+      "what_to_notice": "The audience should see uncertainty handled explicitly, with reviewer questions and restrained next actions instead of unsupported conclusions."
+    }
+  ]
+}
