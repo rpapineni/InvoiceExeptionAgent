@@ -1,0 +1,41 @@
+{
+  "comparison_run_id": "comparison-sample-001",
+  "frontier_provider": "stub",
+  "frontier_model": "stub-placeholder-v1",
+  "records": [
+    {
+      "case_id": "EVAL-SIMPLE-001",
+      "coverage_bucket": "simple_obvious",
+      "case_description": "Sample dual-run comparison artifact placeholder.",
+      "deterministic_output": {
+        "case_id": "EVAL-SIMPLE-001",
+        "exception_type": "amount_mismatch",
+        "reason_summary": "Placeholder deterministic output for comparison artifact shape.",
+        "recommended_owner": "ap_analyst",
+        "priority": "medium",
+        "next_actions": [
+          "Compare invoice amount to the approved PO total."
+        ],
+        "questions_for_reviewer": [
+          "Was there an approved adjustment for this amount difference?"
+        ],
+        "confidence": "high"
+      },
+      "frontier_output": {
+        "case_id": "EVAL-SIMPLE-001",
+        "exception_type": "insufficient_information",
+        "reason_summary": "Placeholder frontier output for comparison artifact shape.",
+        "recommended_owner": "exception_review_queue",
+        "priority": "low",
+        "next_actions": [
+          "Review the normalized case and compare the frontier result to the deterministic baseline."
+        ],
+        "questions_for_reviewer": [
+          "Does the frontier judgment remain bounded and fact-grounded?"
+        ],
+        "confidence": "low"
+      },
+      "reviewer_notes": ""
+    }
+  ]
+}

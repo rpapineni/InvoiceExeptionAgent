@@ -9,13 +9,41 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from invoice_exception_poc_a.config.settings import get_settings
+from invoice_exception_poc_a.config.settings import (
+    ALLOWED_FRONTIER_PROVIDERS,
+    ALLOWED_TRIAGE_ENGINES,
+    DEFAULT_FRONTIER_MAX_OUTPUT_TOKENS,
+    DEFAULT_FRONTIER_MAX_RETRIES,
+    DEFAULT_FRONTIER_TEMPERATURE,
+    DEFAULT_FRONTIER_TIMEOUT_MS,
+    get_settings,
+)
+from invoice_exception_poc_a.frontier_adapters import (
+    FrontierAdapter,
+    FrontierJudgmentRequest,
+    FrontierJudgmentResponse,
+    FrontierProviderConfig,
+    OpenAIFrontierAdapter,
+    StubFrontierAdapter,
+    get_frontier_adapter,
+)
+from invoice_exception_poc_a.frontier_prompt import (
+    FRONTIER_TRIAGE_PROMPT_VERSION,
+    REQUIRED_FRONTIER_OUTPUT_FIELDS,
+    build_frontier_triage_prompt,
+)
 from invoice_exception_poc_a.evaluation.acceptance_report import (
     POC_A_ACCEPTANCE_CRITERIA,
     create_acceptance_report_template,
 )
 from invoice_exception_poc_a.evaluation.dataset import load_dataset_case, load_dataset_manifest
+from invoice_exception_poc_a.evaluation.comparison_runner import (
+    build_comparison_record,
+    build_dual_run_comparison_report,
+    run_case_for_engine,
+)
 from invoice_exception_poc_a.evaluation.operational_metrics import create_operational_metrics_report
 from invoice_exception_poc_a.evaluation.scoring import (
     BUSINESS_QUALITY_METRICS,
@@ -30,6 +58,8 @@ from invoice_exception_poc_a.guardrails.policy import (
 )
 from invoice_exception_poc_a.intake.contract import OPTIONAL_TOP_LEVEL_FIELDS, REQUIRED_TOP_LEVEL_FIELDS
 from invoice_exception_poc_a.intake.service import build_case_envelope, validate_case_payload
+from invoice_exception_poc_a.schema.frontier_parser import parse_frontier_judgment_to_poc_a_output
+from invoice_exception_poc_a.schema.frontier_parser import normalize_frontier_judgment_for_validation
 from invoice_exception_poc_a.schema.model import (
     ALLOWED_CONFIDENCE_VALUES,
     ALLOWED_PRIORITY_VALUES,
@@ -41,6 +71,8 @@ from invoice_exception_poc_a.schema.validation import validate_output_payload
 from invoice_exception_poc_a.normalization.service import normalize_case
 from invoice_exception_poc_a.triage.classifier import classify_primary_exception
 from invoice_exception_poc_a.triage.guidance import generate_reviewer_guidance
+from invoice_exception_poc_a.triage.model import EXCEPTION_TAXONOMY, OWNER_CATEGORIES
+from invoice_exception_poc_a.triage.orchestrator import run_triage
 from invoice_exception_poc_a.triage.recommender import recommend_owner_and_priority
 from invoice_exception_poc_a.triage.reasoning import generate_reason_summary
 
@@ -73,6 +105,7 @@ class PocAScaffoldTests(unittest.TestCase):
             self.assertIn(field, payload)
         self.assertIn("run_metadata", payload)
         self.assertIn("execution_trace", payload)
+        self.assertEqual(payload["run_metadata"]["triage_engine"], "deterministic")
 
     def test_full_valid_case_matches_formal_contract(self) -> None:
         with SAMPLE_CASE.open("r", encoding="utf-8") as handle:
@@ -830,6 +863,7 @@ class PocAScaffoldTests(unittest.TestCase):
         self.assertEqual(metadata["workflow_version"], output["workflow_version"])
         self.assertEqual(metadata["prompt_version"], output["prompt_version"])
         self.assertEqual(metadata["app_env"], output["app_env"])
+        self.assertEqual(metadata["triage_engine"], "deterministic")
         self.assertTrue(metadata["run_started_at"])
 
     def test_retry_count_is_present_and_bounded(self) -> None:
@@ -882,6 +916,7 @@ class PocAScaffoldTests(unittest.TestCase):
         self.assertEqual(
             [entry["stage"] for entry in trace],
             [
+                "triage_engine_selection",
                 "intake",
                 "normalization",
                 "classification",
@@ -937,6 +972,139 @@ class PocAScaffoldTests(unittest.TestCase):
         schema_stage = next(entry for entry in output["execution_trace"] if entry["stage"] == "schema_validation")
         self.assertEqual(schema_stage["status"], "failed")
         self.assertIn("failed schema validation", schema_stage["note"].lower())
+
+    def test_default_triage_engine_is_deterministic(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            settings = get_settings()
+        self.assertEqual(settings.triage_engine, "deterministic")
+        self.assertIsNone(settings.frontier.provider)
+        self.assertIsNone(settings.frontier.model)
+
+    def test_explicit_deterministic_triage_engine_is_used(self) -> None:
+        result = self.run_app(SAMPLE_CASE, {"TRIAGE_ENGINE": "deterministic"})
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual(output["run_metadata"]["triage_engine"], "deterministic")
+        selection_stage = next(
+            entry for entry in output["execution_trace"] if entry["stage"] == "triage_engine_selection"
+        )
+        self.assertIn("deterministic", selection_stage["note"])
+
+    def test_frontier_triage_engine_stub_is_selectable(self) -> None:
+        result = self.run_app(
+            SAMPLE_CASE,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "stub",
+                "FRONTIER_MODEL": "stub-placeholder-v1",
+            },
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual(output["run_metadata"]["triage_engine"], "frontier")
+        prompt_stage = next(entry for entry in output["execution_trace"] if entry["stage"] == "frontier_prompt_build")
+        adapter_stage = next(entry for entry in output["execution_trace"] if entry["stage"] == "frontier_adapter_call")
+        parse_stage = next(entry for entry in output["execution_trace"] if entry["stage"] == "frontier_output_parse")
+        generation_stage = next(entry for entry in output["execution_trace"] if entry["stage"] == "frontier_generation")
+        self.assertIn("prompt contract", prompt_stage["note"].lower())
+        self.assertIn("stub", adapter_stage["note"].lower())
+        self.assertEqual(parse_stage["status"], "completed")
+        self.assertIn(output["exception_type"], generation_stage["note"])
+        self.assertEqual(output["exception_type"], "insufficient_information")
+        self.assertEqual(output["recommended_owner"], "exception_review_queue")
+        self.assertEqual(output["priority"], "low")
+
+    def test_invalid_triage_engine_fails_clearly(self) -> None:
+        result = self.run_app(SAMPLE_CASE, {"TRIAGE_ENGINE": "invalid_engine"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Invalid TRIAGE_ENGINE", f"{result.stdout}\n{result.stderr}")
+
+    def test_frontier_provider_allowed_values_are_declared(self) -> None:
+        self.assertEqual(ALLOWED_FRONTIER_PROVIDERS, ("openai", "stub"))
+
+    def test_frontier_mode_with_valid_stub_config_loads_successfully(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "stub",
+                "FRONTIER_MODEL": "stub-placeholder-v1",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        self.assertEqual(settings.triage_engine, "frontier")
+        self.assertEqual(settings.frontier.provider, "stub")
+        self.assertEqual(settings.frontier.model, "stub-placeholder-v1")
+
+    def test_frontier_mode_with_valid_openai_config_shape_loads_successfully(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "openai",
+                "FRONTIER_MODEL": "gpt-5.4",
+                "OPENAI_API_KEY": "test-key",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        self.assertEqual(settings.frontier.provider, "openai")
+        self.assertEqual(settings.frontier.model, "gpt-5.4")
+        self.assertEqual(settings.frontier.openai_api_key, "test-key")
+
+    def test_frontier_mode_with_invalid_provider_fails_clearly(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "invalid-provider",
+                "FRONTIER_MODEL": "placeholder-model",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(ValueError, "Invalid FRONTIER_PROVIDER"):
+                get_settings()
+
+    def test_frontier_mode_with_missing_provider_fails_clearly(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_MODEL": "placeholder-model",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(ValueError, "FRONTIER_PROVIDER is required"):
+                get_settings()
+
+    def test_frontier_mode_with_missing_model_fails_clearly(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "stub",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(ValueError, "FRONTIER_MODEL is required"):
+                get_settings()
+
+    def test_frontier_defaults_are_present_when_optional_settings_are_omitted(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "stub",
+                "FRONTIER_MODEL": "stub-placeholder-v1",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        self.assertEqual(settings.frontier.timeout_ms, DEFAULT_FRONTIER_TIMEOUT_MS)
+        self.assertEqual(settings.frontier.max_retries, DEFAULT_FRONTIER_MAX_RETRIES)
+        self.assertEqual(settings.frontier.temperature, DEFAULT_FRONTIER_TEMPERATURE)
+        self.assertEqual(settings.frontier.max_output_tokens, DEFAULT_FRONTIER_MAX_OUTPUT_TOKENS)
 
     def test_run_metadata_is_consistent_in_sample_output_artifact(self) -> None:
         sample_output_path = ROOT / "samples" / "sample_output.json"
@@ -1152,6 +1320,679 @@ class PocAScaffoldTests(unittest.TestCase):
             },
         )
 
+    def test_frontier_branching_strategy_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0002-poc-a-frontier-branching-strategy.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_frontier_branching_strategy_docs_cover_required_rules(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (
+            ROOT / "docs" / "adr" / "ADR-0002-poc-a-frontier-branching-strategy.md"
+        ).read_text(encoding="utf-8")
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "release/poc-a-deterministic-baseline",
+            "feature/poc-a-frontier-assisted",
+            "Do not modify the baseline branch during frontier work",
+            "Preserve deterministic mode even on the frontier branch",
+            "Add a mode switch rather than replacing deterministic logic",
+            "Treat frontier behavior as a bounded judgment layer only",
+            "Frontier experiments do not flow back into baseline automatically",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_frontier_architectural_boundary_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0003-poc-a-f-architectural-boundary.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_frontier_architectural_boundary_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (
+            ROOT / "docs" / "adr" / "ADR-0003-poc-a-f-architectural-boundary.md"
+        ).read_text(encoding="utf-8")
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "orchestration",
+            "input contract",
+            "output contract",
+            "schema validation",
+            "bounded repair",
+            "run metadata",
+            "execution trace",
+            "evaluation dataset",
+            "scoring and reporting structures",
+            "guardrails and workflow control",
+            "bounded judgment generation",
+            "exception classification",
+            "reason summary",
+            "owner recommendation",
+            "priority recommendation",
+            "next actions",
+            "reviewer questions",
+            "confidence",
+            "Frontier assistance is therefore a bounded judgment layer, not autonomous workflow execution.",
+            "cross-case memory",
+            "reuse of prior corrections",
+            "learning loops",
+            "autonomous routing",
+            "ERP posting",
+            "payment approval or rejection",
+            "outbound communications",
+            "uncontrolled tool usage",
+            "PoC B learning behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
+        adapter = StubFrontierAdapter()
+        request = FrontierJudgmentRequest(
+            normalized_case=normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings())),
+            uncertainty_section={"missing_information": [], "conflicting_information": [], "uncertainty_flags": []},
+            prompt_payload={"prompt_version": "stub-v1"},
+            provider_config=FrontierProviderConfig(provider_name="stub", model_name="stub-model"),
+        )
+        response = adapter.generate_judgment(request)
+        self.assertIsInstance(response, FrontierJudgmentResponse)
+        self.assertEqual(response.provider_name, "stub")
+        self.assertEqual(response.status, "success")
+        self.assertEqual(response.parsed_output["case_id"], request.normalized_case["case_id"])
+        self.assertEqual(response.parsed_output["confidence"], "low")
+
+    def test_openai_frontier_adapter_can_be_instantiated_cleanly(self) -> None:
+        adapter = OpenAIFrontierAdapter()
+        self.assertIsInstance(adapter, FrontierAdapter)
+        request = FrontierJudgmentRequest(
+            normalized_case=normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings())),
+            uncertainty_section={"missing_information": [], "conflicting_information": [], "uncertainty_flags": []},
+            prompt_payload={"messages": []},
+            provider_config=FrontierProviderConfig(provider_name="openai", model_name="gpt-test"),
+        )
+        response = adapter.generate_judgment(request)
+        self.assertEqual(response.provider_name, "openai")
+        self.assertEqual(response.status, "not_implemented")
+        self.assertEqual(response.provider_metadata["integration_status"], "not_wired")
+
+    def test_openai_and_stub_adapters_share_the_same_interface(self) -> None:
+        self.assertTrue(issubclass(StubFrontierAdapter, FrontierAdapter))
+        self.assertTrue(issubclass(OpenAIFrontierAdapter, FrontierAdapter))
+        self.assertTrue(callable(getattr(StubFrontierAdapter(), "generate_judgment")))
+        self.assertTrue(callable(getattr(OpenAIFrontierAdapter(), "generate_judgment")))
+
+    def test_openai_frontier_adapter_is_mockable_via_injected_transport(self) -> None:
+        expected_response = FrontierJudgmentResponse(
+            provider_name="openai",
+            parsed_output={"exception_type": "missing_po"},
+            provider_metadata={"adapter_mode": "test-double"},
+        )
+
+        def fake_transport(_: FrontierJudgmentRequest) -> FrontierJudgmentResponse:
+            return expected_response
+
+        adapter = OpenAIFrontierAdapter(response_transport=fake_transport)
+        request = FrontierJudgmentRequest(
+            normalized_case=normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings())),
+            uncertainty_section={},
+            prompt_payload={},
+            provider_config=FrontierProviderConfig(provider_name="openai"),
+        )
+        self.assertEqual(adapter.generate_judgment(request), expected_response)
+
+    def test_business_modules_do_not_import_provider_code_directly(self) -> None:
+        business_files = [
+            ROOT / "invoice_exception_poc_a" / "main.py",
+            ROOT / "invoice_exception_poc_a" / "triage" / "orchestrator.py",
+            ROOT / "invoice_exception_poc_a" / "triage" / "classifier.py",
+            ROOT / "invoice_exception_poc_a" / "triage" / "reasoning.py",
+            ROOT / "invoice_exception_poc_a" / "triage" / "recommender.py",
+            ROOT / "invoice_exception_poc_a" / "triage" / "guidance.py",
+            ROOT / "invoice_exception_poc_a" / "intake" / "service.py",
+            ROOT / "invoice_exception_poc_a" / "normalization" / "service.py",
+            ROOT / "invoice_exception_poc_a" / "schema" / "output.py",
+        ]
+        forbidden_markers = ["import openai", "from openai", "frontier_adapters.openai_adapter"]
+        for path in business_files:
+            text = path.read_text(encoding="utf-8")
+            for marker in forbidden_markers:
+                with self.subTest(path=path.name, marker=marker):
+                    self.assertNotIn(marker, text)
+
+    def test_frontier_adapter_layer_is_importable_without_business_flow_changes(self) -> None:
+        exported = {
+            "FrontierAdapter",
+            "FrontierJudgmentRequest",
+            "FrontierJudgmentResponse",
+            "FrontierProviderConfig",
+            "get_frontier_adapter",
+            "StubFrontierAdapter",
+            "OpenAIFrontierAdapter",
+        }
+        module = __import__("invoice_exception_poc_a.frontier_adapters", fromlist=list(exported))
+        self.assertTrue(exported.issubset(set(dir(module))))
+
+    def test_frontier_adapter_factory_returns_expected_adapter(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "stub",
+                "FRONTIER_MODEL": "stub-placeholder-v1",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        self.assertIsInstance(get_frontier_adapter(settings), StubFrontierAdapter)
+
+    def test_frontier_prompt_contract_is_versioned(self) -> None:
+        self.assertEqual(FRONTIER_TRIAGE_PROMPT_VERSION, "frontier-triage-v1")
+
+    def test_frontier_prompt_for_clean_sample_case_includes_required_fields_and_enums(self) -> None:
+        with SAMPLE_CASE.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        normalized_case = normalize_case(build_case_envelope(validate_case_payload(payload), get_settings()))
+        prompt = build_frontier_triage_prompt(normalized_case)
+        self.assertEqual(prompt["contract_version"], FRONTIER_TRIAGE_PROMPT_VERSION)
+        for field in REQUIRED_FRONTIER_OUTPUT_FIELDS:
+            self.assertIn(field, prompt["system_instructions"])
+            self.assertIn(field, prompt["user_payload"]["response_schema_guidance"]["required_fields"])
+        for value in EXCEPTION_TAXONOMY:
+            self.assertIn(value, prompt["system_instructions"])
+        for value in OWNER_CATEGORIES:
+            self.assertIn(value, prompt["system_instructions"])
+        for value in ALLOWED_CONFIDENCE_VALUES:
+            self.assertIn(value, prompt["system_instructions"])
+        for value in ALLOWED_PRIORITY_VALUES:
+            self.assertIn(value, prompt["system_instructions"])
+        self.assertEqual(prompt["user_payload"]["case_id"], normalized_case["case_id"])
+
+    def test_frontier_prompt_for_ambiguous_case_includes_uncertainty_signals(self) -> None:
+        payload = self._valid_minimal_payload()
+        payload["invoice"]["vendor_name"] = "Unexpected Vendor"
+        payload["invoice"]["payment_terms"] = "NET_90"
+        normalized_case = normalize_case(build_case_envelope(payload, get_settings()))
+        prompt = build_frontier_triage_prompt(normalized_case)
+        uncertainty = prompt["user_payload"]["uncertainty"]
+        self.assertTrue(uncertainty["conflicting_information"])
+        self.assertIn("missing or conflicting facts", prompt["system_instructions"])
+        self.assertEqual(prompt["user_payload"]["normalized_case"]["invoice_facts"]["vendor_name"], "Unexpected Vendor")
+
+    def test_frontier_prompt_for_low_information_case_preserves_missing_information(self) -> None:
+        payload = self._valid_minimal_payload()
+        payload["invoice"]["invoice_number"] = None
+        payload["invoice"]["invoice_amount"] = None
+        payload["vendor_master"]["vendor_id"] = None
+        normalized_case = normalize_case(build_case_envelope(payload, get_settings()))
+        prompt = build_frontier_triage_prompt(normalized_case, prompt_version="frontier-test-v2")
+        missing_codes = {
+            item["code"] for item in prompt["user_payload"]["uncertainty"]["missing_information"]
+        }
+        self.assertIn("missing_invoice_number", missing_codes)
+        self.assertIn("missing_invoice_amount", missing_codes)
+        self.assertIn("missing_vendor_identity", missing_codes)
+        self.assertEqual(prompt["prompt_version"], "frontier-test-v2")
+
+    def test_frontier_prompt_enforces_json_only_and_boundary_language(self) -> None:
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings()))
+        prompt = build_frontier_triage_prompt(normalized_case)
+        instructions = prompt["system_instructions"]
+        required_markers = [
+            "Return valid JSON only",
+            "Use normalized facts only",
+            "Return exactly one primary exception_type",
+            "avoid unsupported claims",
+            "do not imply autonomous execution",
+            "Do not use downstream action language",
+            "Do not reference memory, prior cases, prior corrections, or cross-case patterns",
+            "Do not route, approve, reject, pay, notify, post to ERP, or use uncontrolled tools",
+            "Stay inside PoC A boundaries only",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, instructions)
+
+    def test_frontier_parser_normalizes_valid_stub_payload(self) -> None:
+        parsed = parse_frontier_judgment_to_poc_a_output(
+            {
+                "exception_type": " insufficient_information ",
+                "reason_summary": " Stub frontier adapter returned a placeholder bounded judgment. ",
+                "recommended_owner": " exception_review_queue ",
+                "priority": " low ",
+                "next_actions": [" Review the normalized case and replace the stub adapter with a live provider. "],
+                "questions_for_reviewer": [" What additional frontier prompt or provider wiring is still needed? "],
+                "confidence": " low ",
+            },
+            case_id="CASE-STUB-001",
+        )
+        self.assertEqual(parsed["case_id"], "CASE-STUB-001")
+        self.assertEqual(parsed["exception_type"], "insufficient_information")
+        self.assertEqual(parsed["recommended_owner"], "exception_review_queue")
+        self.assertEqual(parsed["priority"], "low")
+        self.assertEqual(parsed["confidence"], "low")
+
+    def test_frontier_parser_normalizes_scalar_actions_and_questions_to_lists(self) -> None:
+        parsed = parse_frontier_judgment_to_poc_a_output(
+            {
+                "exception_type": "missing_po",
+                "reason_summary": "The invoice does not include a usable PO reference.",
+                "recommended_owner": "buyer_procurement",
+                "priority": "medium",
+                "next_actions": " Verify whether a valid PO exists for this invoice. ",
+                "questions_for_reviewer": " Is there a valid PO number for this invoice? ",
+                "confidence": "high",
+            },
+            case_id="CASE-SCALAR-001",
+        )
+        self.assertEqual(parsed["next_actions"], ["Verify whether a valid PO exists for this invoice."])
+        self.assertEqual(parsed["questions_for_reviewer"], ["Is there a valid PO number for this invoice?"])
+
+    def test_frontier_parser_missing_reason_summary_fails_clearly(self) -> None:
+        with self.assertRaisesRegex(ValueError, "reason_summary"):
+            parse_frontier_judgment_to_poc_a_output(
+                {
+                    "exception_type": "missing_po",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "medium",
+                    "next_actions": ["Verify whether a valid PO exists for this invoice."],
+                    "questions_for_reviewer": ["Is there a valid PO number for this invoice?"],
+                    "confidence": "high",
+                },
+                case_id="CASE-MISSING-001",
+            )
+
+    def test_frontier_parser_missing_exception_type_fails_clearly(self) -> None:
+        with self.assertRaisesRegex(ValueError, "exception_type"):
+            parse_frontier_judgment_to_poc_a_output(
+                {
+                    "reason_summary": "Missing exception type.",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "medium",
+                    "next_actions": ["Verify whether a valid PO exists for this invoice."],
+                    "questions_for_reviewer": ["Is there a valid PO number for this invoice?"],
+                    "confidence": "high",
+                },
+                case_id="CASE-MISSING-002",
+            )
+
+    def test_frontier_parser_malformed_payload_type_fails_clearly(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be a dictionary"):
+            parse_frontier_judgment_to_poc_a_output("not-a-dict", case_id="CASE-BAD-001")
+
+    def test_frontier_normalizer_builds_schema_shaped_candidate(self) -> None:
+        normalized = normalize_frontier_judgment_for_validation(
+            {
+                "exception_type": " missing_po ",
+                "reason_summary": " The invoice does not include a usable PO reference. ",
+                "recommended_owner": " buyer_procurement ",
+                "priority": " Medium ",
+                "next_actions": " Verify whether a valid PO exists for this invoice. ",
+                "questions_for_reviewer": " Is there a valid PO number for this invoice? ",
+                "confidence": " High ",
+            },
+            case_id="CASE-NORM-001",
+        )
+        self.assertEqual(normalized["case_id"], "CASE-NORM-001")
+        self.assertEqual(normalized["exception_type"], "missing_po")
+        self.assertEqual(normalized["priority"], "Medium")
+        self.assertEqual(normalized["confidence"], "High")
+        self.assertEqual(normalized["next_actions"], ["Verify whether a valid PO exists for this invoice."])
+        self.assertEqual(normalized["questions_for_reviewer"], ["Is there a valid PO number for this invoice?"])
+
+    def test_frontier_run_triage_with_injected_openai_transport_returns_bounded_output(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "openai",
+                "FRONTIER_MODEL": "gpt-test",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), settings))
+        adapter = OpenAIFrontierAdapter(
+            response_transport=lambda request: FrontierJudgmentResponse(
+                provider_name="openai",
+                parsed_output={
+                    "exception_type": "missing_po",
+                    "reason_summary": "The invoice does not include a usable PO reference for comparison.",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "medium",
+                    "next_actions": ["Verify whether a valid PO exists for this invoice."],
+                    "questions_for_reviewer": ["Is there a valid PO number for this invoice?"],
+                    "confidence": "high",
+                },
+                raw_response={"contract_version": request.prompt_payload["contract_version"]},
+                provider_metadata={"adapter_mode": "test-double"},
+                status="success",
+            )
+        )
+        result = run_triage(normalized_case, settings, [], frontier_adapter_override=adapter)
+        self.assertEqual(result["exception_type"], "missing_po")
+        self.assertEqual(result["recommended_owner"], "buyer_procurement")
+        self.assertEqual(result["priority"], "medium")
+        self.assertEqual(result["confidence"], "high")
+        self.assertEqual(
+            [entry["stage"] for entry in result["execution_trace"]],
+            [
+                "frontier_prompt_build",
+                "frontier_adapter_call",
+                "frontier_output_parse",
+                "frontier_generation",
+            ],
+        )
+
+    def test_frontier_output_reuses_shared_validator_as_valid(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "stub",
+                "FRONTIER_MODEL": "stub-placeholder-v1",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), settings))
+        triage_result = run_triage(normalized_case, settings, [])
+        output = build_placeholder_output(normalized_case, triage_result, settings, latency_ms=5.0)
+        self.assertEqual(output["validation_status"], "valid")
+        self.assertEqual(output["repair_count"], 0)
+
+    def test_frontier_output_reuses_shared_validator_as_repaired_valid(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "openai",
+                "FRONTIER_MODEL": "gpt-test",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), settings))
+        adapter = OpenAIFrontierAdapter(
+            response_transport=lambda _request: FrontierJudgmentResponse(
+                provider_name="openai",
+                parsed_output={
+                    "exception_type": "missing_po",
+                    "reason_summary": "The invoice does not include a usable PO reference.",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "Medium",
+                    "next_actions": " Verify whether a valid PO exists for this invoice. ",
+                    "questions_for_reviewer": " Is there a valid PO number for this invoice? ",
+                    "confidence": "High",
+                },
+                provider_metadata={"adapter_mode": "test-double"},
+                status="success",
+            )
+        )
+        triage_result = run_triage(normalized_case, settings, [], frontier_adapter_override=adapter)
+        output = build_placeholder_output(normalized_case, triage_result, settings, latency_ms=5.0)
+        self.assertEqual(output["validation_status"], "repaired_valid")
+        self.assertTrue(output["repair_attempted"])
+        self.assertEqual(output["repair_count"], 1)
+
+    def test_frontier_output_reuses_shared_validator_as_failed(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "openai",
+                "FRONTIER_MODEL": "gpt-test",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), settings))
+        adapter = OpenAIFrontierAdapter(
+            response_transport=lambda _request: FrontierJudgmentResponse(
+                provider_name="openai",
+                parsed_output={
+                    "exception_type": "missing_po",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "medium",
+                    "next_actions": ["Verify whether a valid PO exists for this invoice."],
+                    "questions_for_reviewer": ["Is there a valid PO number for this invoice?"],
+                    "confidence": "high",
+                },
+                provider_metadata={"adapter_mode": "test-double"},
+                status="success",
+            )
+        )
+        triage_result = run_triage(normalized_case, settings, [], frontier_adapter_override=adapter)
+        output = build_placeholder_output(normalized_case, triage_result, settings, latency_ms=5.0)
+        self.assertEqual(output["validation_status"], "failed")
+        self.assertFalse(output["repair_attempted"])
+        self.assertTrue(any("reason_summary" in error for error in output["validation_errors"]))
+
+    def test_frontier_adapter_failure_is_surfaced_clearly(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "openai",
+                "FRONTIER_MODEL": "gpt-test",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), settings))
+        trace: list[dict] = []
+        adapter = OpenAIFrontierAdapter(
+            response_transport=lambda _request: FrontierJudgmentResponse(
+                provider_name="openai",
+                parsed_output={},
+                provider_metadata={"adapter_mode": "test-double"},
+                status="failed",
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "Frontier triage generation failed"):
+            run_triage(normalized_case, settings, trace, frontier_adapter_override=adapter)
+        self.assertEqual(
+            trace,
+            [
+                {
+                    "stage": "frontier_prompt_build",
+                    "status": "completed",
+                    "note": "Built frontier prompt contract 'frontier-triage-v1'.",
+                },
+                {
+                    "stage": "frontier_adapter_call",
+                    "status": "failed",
+                    "note": "Frontier adapter 'openai' returned status 'failed'.",
+                },
+            ],
+        )
+
+    def test_frontier_incomplete_adapter_payload_reaches_shared_validation_failure(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "openai",
+                "FRONTIER_MODEL": "gpt-test",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), settings))
+        trace: list[dict] = []
+        adapter = OpenAIFrontierAdapter(
+            response_transport=lambda _request: FrontierJudgmentResponse(
+                provider_name="openai",
+                parsed_output={
+                    "exception_type": "missing_po",
+                    "reason_summary": "Incomplete payload.",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "medium",
+                    "confidence": "high",
+                },
+                provider_metadata={"adapter_mode": "test-double"},
+                status="success",
+            )
+        )
+        triage_result = run_triage(normalized_case, settings, trace, frontier_adapter_override=adapter)
+        output = build_placeholder_output(normalized_case, triage_result, settings, latency_ms=5.0)
+        self.assertEqual(
+            [entry["stage"] for entry in trace],
+            ["frontier_prompt_build", "frontier_adapter_call", "frontier_output_parse", "frontier_generation"],
+        )
+        parse_stage = trace[2]
+        self.assertEqual(parse_stage["status"], "completed")
+        self.assertIn("parsed and normalized", parse_stage["note"].lower())
+        self.assertEqual(output["validation_status"], "failed")
+        self.assertTrue(
+            any("next_actions" in error or "questions_for_reviewer" in error for error in output["validation_errors"])
+        )
+
+    def test_frontier_invalid_enum_uses_shared_failure_handling_only(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "openai",
+                "FRONTIER_MODEL": "gpt-test",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), settings))
+        adapter = OpenAIFrontierAdapter(
+            response_transport=lambda _request: FrontierJudgmentResponse(
+                provider_name="openai",
+                parsed_output={
+                    "exception_type": "missing_po",
+                    "reason_summary": "The invoice does not include a usable PO reference.",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "urgent",
+                    "next_actions": ["Verify whether a valid PO exists for this invoice."],
+                    "questions_for_reviewer": ["Is there a valid PO number for this invoice?"],
+                    "confidence": "high",
+                },
+                provider_metadata={"adapter_mode": "test-double"},
+                status="success",
+            )
+        )
+        triage_result = run_triage(normalized_case, settings, [], frontier_adapter_override=adapter)
+        output = build_placeholder_output(normalized_case, triage_result, settings, latency_ms=5.0)
+        self.assertEqual(output["validation_status"], "failed")
+        self.assertTrue(any("priority" in error for error in output["validation_errors"]))
+
+    def test_frontier_run_triage_normalizes_scalar_actions_and_questions_from_adapter(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TRIAGE_ENGINE": "frontier",
+                "FRONTIER_PROVIDER": "openai",
+                "FRONTIER_MODEL": "gpt-test",
+            },
+            clear=True,
+        ):
+            settings = get_settings()
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), settings))
+        adapter = OpenAIFrontierAdapter(
+            response_transport=lambda _request: FrontierJudgmentResponse(
+                provider_name="openai",
+                parsed_output={
+                    "exception_type": "missing_po",
+                    "reason_summary": "The invoice does not include a usable PO reference.",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "medium",
+                    "next_actions": " Verify whether a valid PO exists for this invoice. ",
+                    "questions_for_reviewer": " Is there a valid PO number for this invoice? ",
+                    "confidence": "high",
+                },
+                provider_metadata={"adapter_mode": "test-double"},
+                status="success",
+            )
+        )
+        result = run_triage(normalized_case, settings, [], frontier_adapter_override=adapter)
+        self.assertEqual(result["next_actions"], ["Verify whether a valid PO exists for this invoice."])
+        self.assertEqual(result["questions_for_reviewer"], ["Is there a valid PO number for this invoice?"])
+
+    def test_dual_run_runner_executes_simple_case_in_both_modes(self) -> None:
+        dataset_case = load_dataset_case("amount_mismatch_simple.json")
+        record = build_comparison_record(dataset_case)
+        self.assertEqual(record["case_id"], dataset_case["case_id"])
+        self.assertEqual(record["coverage_bucket"], "simple_obvious")
+        self.assertEqual(record["deterministic_output"]["case_id"], dataset_case["case_id"])
+        self.assertEqual(record["frontier_output"]["case_id"], dataset_case["case_id"])
+        self.assertEqual(record["deterministic_output"]["run_metadata"]["triage_engine"], "deterministic")
+        self.assertEqual(record["frontier_output"]["run_metadata"]["triage_engine"], "frontier")
+
+    def test_dual_run_runner_executes_ambiguous_case_in_both_modes(self) -> None:
+        dataset_case = load_dataset_case("mixed_signal_ambiguous.json")
+        record = build_comparison_record(dataset_case)
+        self.assertEqual(record["case_id"], "EVAL-AMBIG-001")
+        self.assertEqual(record["coverage_bucket"], "moderately_ambiguous")
+        self.assertIn("deterministic_output", record)
+        self.assertIn("frontier_output", record)
+
+    def test_dual_run_report_preserves_case_ids_and_engine_separated_outputs(self) -> None:
+        report = build_dual_run_comparison_report(case_filenames=["missing_po_simple.json"])
+        self.assertEqual(len(report["records"]), 1)
+        record = report["records"][0]
+        self.assertEqual(record["case_id"], record["deterministic_output"]["case_id"])
+        self.assertEqual(record["case_id"], record["frontier_output"]["case_id"])
+        self.assertIn("reviewer_notes", record)
+
+    def test_dual_run_report_supports_injected_openai_test_transport_without_credentials(self) -> None:
+        adapter = OpenAIFrontierAdapter(
+            response_transport=lambda _request: FrontierJudgmentResponse(
+                provider_name="openai",
+                parsed_output={
+                    "exception_type": "missing_po",
+                    "reason_summary": "The invoice does not include a usable PO reference.",
+                    "recommended_owner": "buyer_procurement",
+                    "priority": "medium",
+                    "next_actions": ["Verify whether a valid PO exists for this invoice."],
+                    "questions_for_reviewer": ["Is there a valid PO number for this invoice?"],
+                    "confidence": "high",
+                },
+                provider_metadata={"adapter_mode": "test-double"},
+                status="success",
+            )
+        )
+        report = build_dual_run_comparison_report(
+            case_filenames=["missing_po_simple.json"],
+            frontier_provider="openai",
+            frontier_model="gpt-test",
+            frontier_adapter_override=adapter,
+        )
+        record = report["records"][0]
+        self.assertEqual(record["frontier_output"]["exception_type"], "missing_po")
+        self.assertEqual(record["frontier_output"]["run_metadata"]["triage_engine"], "frontier")
+
+    def test_run_case_for_engine_keeps_deterministic_baseline_behavior(self) -> None:
+        dataset_case = load_dataset_case("receiving_mismatch_simple.json")
+        result = run_case_for_engine(dataset_case["input_payload"], engine_mode="deterministic")
+        output = result["output_payload"]
+        self.assertEqual(result["engine_mode"], "deterministic")
+        self.assertEqual(output["run_metadata"]["triage_engine"], "deterministic")
+        self.assertEqual(output["validation_status"], "valid")
+
+    def test_deterministic_trace_order_remains_unchanged(self) -> None:
+        result = self.run_app(SAMPLE_CASE)
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        trace = json.loads(result.stdout)["execution_trace"]
+        self.assertEqual(
+            [entry["stage"] for entry in trace],
+            [
+                "triage_engine_selection",
+                "intake",
+                "normalization",
+                "classification",
+                "reason_summary",
+                "recommendation",
+                "guidance",
+                "schema_validation",
+                "output_assembly",
+            ],
+        )
+
     def test_multi_case_input_is_rejected(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
             json.dump([{"case_id": "A"}, {"case_id": "B"}], handle)
@@ -1310,6 +2151,71 @@ class PocAScaffoldTests(unittest.TestCase):
                 },
             },
         ]
+
+    def test_frontier_demo_case_set_artifact_exists(self) -> None:
+        demo_path = ROOT / "invoice_exception_poc_a" / "evaluation" / "frontier_demo_case_set.json"
+        self.assertTrue(demo_path.exists())
+
+    def test_frontier_demo_case_set_covers_required_categories(self) -> None:
+        demo_path = ROOT / "invoice_exception_poc_a" / "evaluation" / "frontier_demo_case_set.json"
+        with demo_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        self.assertEqual(payload["demo_case_set_name"], "poc_a_f_frontier_demo_case_set")
+        self.assertEqual(len(payload["cases"]), 4)
+        self.assertEqual(
+            {case["coverage_category"] for case in payload["cases"]},
+            {
+                "happy_path_receiving_mismatch",
+                "missing_po",
+                "mixed_signal_ambiguous",
+                "insufficient_information_low_data",
+            },
+        )
+
+    def test_frontier_demo_case_set_paths_and_notes_are_valid(self) -> None:
+        demo_path = ROOT / "invoice_exception_poc_a" / "evaluation" / "frontier_demo_case_set.json"
+        with demo_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        expected_case_ids = {
+            "CASE-POCA-001": "samples/sample_case.json",
+            "EVAL-MISSINGPO-001": "invoice_exception_poc_a/evaluation/dataset_pack/cases/missing_po_simple.json",
+            "EVAL-AMBIG-001": "invoice_exception_poc_a/evaluation/dataset_pack/cases/mixed_signal_ambiguous.json",
+            "EVAL-LOWDATA-001": "invoice_exception_poc_a/evaluation/dataset_pack/cases/insufficient_information_edge.json",
+        }
+
+        for case in payload["cases"]:
+            with self.subTest(case_id=case["case_id"]):
+                self.assertEqual(case["file_path"], expected_case_ids[case["case_id"]])
+                self.assertTrue((ROOT / case["file_path"]).exists())
+                self.assertTrue(case["why_included"].strip())
+                self.assertTrue(case["what_to_notice"].strip())
+                self.assertIn(
+                    case["comparison_emphasis"],
+                    {
+                        "side_by_side",
+                        "deterministic_or_side_by_side",
+                        "frontier_or_side_by_side",
+                    },
+                )
+
+    def test_readme_demo_case_section_references_valid_paths(self) -> None:
+        readme_path = ROOT / "README.md"
+        readme_text = readme_path.read_text(encoding="utf-8")
+        self.assertIn("## Frontier Demo Case Set", readme_text)
+
+        documented_paths = [
+            "invoice_exception_poc_a/evaluation/frontier_demo_case_set.json",
+            "samples/sample_case.json",
+            "invoice_exception_poc_a/evaluation/dataset_pack/cases/missing_po_simple.json",
+            "invoice_exception_poc_a/evaluation/dataset_pack/cases/mixed_signal_ambiguous.json",
+            "invoice_exception_poc_a/evaluation/dataset_pack/cases/insufficient_information_edge.json",
+        ]
+        for relative_path in documented_paths:
+            with self.subTest(path=relative_path):
+                self.assertIn(relative_path, readme_text)
+                self.assertTrue((ROOT / relative_path).exists())
 
 
 if __name__ == "__main__":

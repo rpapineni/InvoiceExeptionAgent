@@ -34,6 +34,13 @@ def main() -> int:
         execution_trace: list[dict] = []
         args = parse_args()
         settings = get_settings()
+        execution_trace.append(
+            build_trace_event(
+                "triage_engine_selection",
+                "completed",
+                f"Selected triage engine '{settings.triage_engine}'.",
+            )
+        )
         case_envelope = load_case_envelope(Path(args.input), settings)
         execution_trace.append(build_trace_event("intake", "completed", "Loaded one validated case envelope."))
         normalized_case = normalize_case(case_envelope)
