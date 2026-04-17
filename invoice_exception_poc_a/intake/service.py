@@ -31,7 +31,21 @@ def load_case(path: Path) -> dict:
                 )
             return validate_case_payload(cases[0])
 
+    if _looks_like_dataset_case_wrapper(payload):
+        return validate_case_payload(payload["input_payload"])
+
     return validate_case_payload(payload)
+
+
+def _looks_like_dataset_case_wrapper(payload: dict) -> bool:
+    """Return True when the JSON object is a dataset wrapper around one input payload."""
+    input_payload = payload.get("input_payload")
+    return (
+        isinstance(input_payload, dict)
+        and "case_id" in payload
+        and "expected_outcome" in payload
+        and "coverage_bucket" in payload
+    )
 
 
 def load_case_envelope(path: Path, settings) -> dict:

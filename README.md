@@ -331,6 +331,15 @@ PoC A-F now includes a small four-case demo set for stakeholder walkthroughs. Th
 - `invoice_exception_poc_a/evaluation/dataset_pack/cases/insufficient_information_edge.json` shows bounded low-information behavior
 - Each entry includes the exact runnable path, why the case is included, and what the demo audience should notice
 
+## Frontier Demo Script
+
+PoC A-F also includes a stakeholder demo script in `invoice_exception_poc_a/evaluation/frontier_demo_script.md`.
+
+- The script uses the same four F6.1 demo cases
+- It explains deterministic versus frontier framing in business-safe language
+- It includes per-case talk track guidance, comparison framing, and a closing takeaway
+- It explicitly reinforces that frontier assistance is bounded and not autonomous workflow execution
+
 ## Current status
 
 This implementation is a scaffold only. It provides structure, placeholders, and a minimal single-case execution path so later stories can be added without changing the bounded project shape.

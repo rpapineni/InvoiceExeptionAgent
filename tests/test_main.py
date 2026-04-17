@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from invoice_exception_poc_a.config.settings import (
@@ -57,7 +58,7 @@ from invoice_exception_poc_a.guardrails.policy import (
     get_guardrails_snapshot,
 )
 from invoice_exception_poc_a.intake.contract import OPTIONAL_TOP_LEVEL_FIELDS, REQUIRED_TOP_LEVEL_FIELDS
-from invoice_exception_poc_a.intake.service import build_case_envelope, validate_case_payload
+from invoice_exception_poc_a.intake.service import build_case_envelope, load_case, validate_case_payload
 from invoice_exception_poc_a.schema.frontier_parser import parse_frontier_judgment_to_poc_a_output
 from invoice_exception_poc_a.schema.frontier_parser import normalize_frontier_judgment_for_validation
 from invoice_exception_poc_a.schema.model import (
@@ -1413,8 +1414,8 @@ class PocAScaffoldTests(unittest.TestCase):
         )
         response = adapter.generate_judgment(request)
         self.assertEqual(response.provider_name, "openai")
-        self.assertEqual(response.status, "not_implemented")
-        self.assertEqual(response.provider_metadata["integration_status"], "not_wired")
+        self.assertEqual(response.status, "failed")
+        self.assertEqual(response.provider_metadata["error_code"], "missing_api_key")
 
     def test_openai_and_stub_adapters_share_the_same_interface(self) -> None:
         self.assertTrue(issubclass(StubFrontierAdapter, FrontierAdapter))
@@ -1440,6 +1441,130 @@ class PocAScaffoldTests(unittest.TestCase):
             provider_config=FrontierProviderConfig(provider_name="openai"),
         )
         self.assertEqual(adapter.generate_judgment(request), expected_response)
+
+    def test_openai_frontier_adapter_live_path_parses_successful_json_response(self) -> None:
+        class FakeResponsesClient:
+            def __init__(self) -> None:
+                self.kwargs = None
+
+            def create(self, **kwargs):
+                self.kwargs = kwargs
+                return SimpleNamespace(
+                    id="resp_test_123",
+                    output_text=json.dumps(
+                        {
+                            "exception_type": "missing_po",
+                            "reason_summary": "Invoice lacks a usable PO anchor.",
+                            "recommended_owner": "buyer_procurement",
+                            "priority": "medium",
+                            "next_actions": ["Verify whether a valid PO exists for this invoice."],
+                            "questions_for_reviewer": ["Is there a valid PO number for this invoice?"],
+                            "confidence": "high",
+                        }
+                    ),
+                    model_dump=lambda: {"id": "resp_test_123", "output_text": "json"},
+                )
+
+        fake_responses = FakeResponsesClient()
+        fake_client = SimpleNamespace(responses=fake_responses)
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings()))
+        prompt_payload = build_frontier_triage_prompt(normalized_case)
+        adapter = OpenAIFrontierAdapter(client_factory=lambda api_key, timeout_ms: fake_client)
+        request = FrontierJudgmentRequest(
+            normalized_case=normalized_case,
+            uncertainty_section={"missing_information": [], "conflicting_information": [], "uncertainty_flags": []},
+            prompt_payload=prompt_payload,
+            provider_config=FrontierProviderConfig(
+                provider_name="openai",
+                model_name="gpt-test",
+                timeout_ms=12345,
+                temperature=0.2,
+                max_output_tokens=400,
+                openai_api_key="test-key",
+            ),
+        )
+
+        response = adapter.generate_judgment(request)
+        self.assertEqual(response.status, "success")
+        self.assertEqual(response.parsed_output["exception_type"], "missing_po")
+        self.assertEqual(response.provider_metadata["response_id"], "resp_test_123")
+        self.assertEqual(response.provider_metadata["model_name"], "gpt-test")
+        self.assertEqual(fake_responses.kwargs["model"], "gpt-test")
+        self.assertEqual(
+            fake_responses.kwargs["input"][0]["content"][0]["text"],
+            prompt_payload["system_instructions"],
+        )
+        self.assertEqual(
+            json.loads(fake_responses.kwargs["input"][1]["content"][0]["text"]),
+            prompt_payload["user_payload"],
+        )
+
+    def test_openai_frontier_adapter_live_path_api_failure_is_bounded(self) -> None:
+        class RaisingResponsesClient:
+            def create(self, **kwargs):
+                raise RuntimeError("boom")
+
+        fake_client = SimpleNamespace(responses=RaisingResponsesClient())
+        normalized_case = normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings()))
+        adapter = OpenAIFrontierAdapter(client_factory=lambda api_key, timeout_ms: fake_client)
+        request = FrontierJudgmentRequest(
+            normalized_case=normalized_case,
+            uncertainty_section={},
+            prompt_payload=build_frontier_triage_prompt(normalized_case),
+            provider_config=FrontierProviderConfig(
+                provider_name="openai",
+                model_name="gpt-test",
+                openai_api_key="test-key",
+            ),
+        )
+        response = adapter.generate_judgment(request)
+        self.assertEqual(response.status, "failed")
+        self.assertEqual(response.provider_metadata["error_code"], "api_error")
+
+    def test_openai_frontier_adapter_live_path_missing_model_fails_clearly(self) -> None:
+        adapter = OpenAIFrontierAdapter()
+        request = FrontierJudgmentRequest(
+            normalized_case=normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings())),
+            uncertainty_section={},
+            prompt_payload=build_frontier_triage_prompt(
+                normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings()))
+            ),
+            provider_config=FrontierProviderConfig(
+                provider_name="openai",
+                model_name=None,
+                openai_api_key="test-key",
+            ),
+        )
+        response = adapter.generate_judgment(request)
+        self.assertEqual(response.status, "failed")
+        self.assertEqual(response.provider_metadata["error_code"], "missing_model")
+
+    def test_openai_frontier_adapter_live_path_invalid_json_fails_clearly(self) -> None:
+        fake_client = SimpleNamespace(
+            responses=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    id="resp_bad_json",
+                    output_text="{not-valid-json",
+                    model_dump=lambda: {"id": "resp_bad_json", "output_text": "{not-valid-json"},
+                )
+            )
+        )
+        adapter = OpenAIFrontierAdapter(client_factory=lambda api_key, timeout_ms: fake_client)
+        request = FrontierJudgmentRequest(
+            normalized_case=normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings())),
+            uncertainty_section={},
+            prompt_payload=build_frontier_triage_prompt(
+                normalize_case(build_case_envelope(self._valid_minimal_payload(), get_settings()))
+            ),
+            provider_config=FrontierProviderConfig(
+                provider_name="openai",
+                model_name="gpt-test",
+                openai_api_key="test-key",
+            ),
+        )
+        response = adapter.generate_judgment(request)
+        self.assertEqual(response.status, "failed")
+        self.assertEqual(response.provider_metadata["error_code"], "malformed_json")
 
     def test_business_modules_do_not_import_provider_code_directly(self) -> None:
         business_files = [
@@ -2006,6 +2131,35 @@ class PocAScaffoldTests(unittest.TestCase):
         finally:
             temp_path.unlink(missing_ok=True)
 
+    def test_dataset_wrapper_input_is_accepted_by_cli(self) -> None:
+        dataset_case = (
+            ROOT
+            / "invoice_exception_poc_a"
+            / "evaluation"
+            / "dataset_pack"
+            / "cases"
+            / "mixed_signal_ambiguous.json"
+        )
+        result = self.run_app(dataset_case, {"TRIAGE_ENGINE": "deterministic"})
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["case_id"], "EVAL-AMBIG-001")
+        self.assertEqual(payload["run_metadata"]["triage_engine"], "deterministic")
+
+    def test_load_case_unwraps_dataset_case_wrapper(self) -> None:
+        dataset_case = (
+            ROOT
+            / "invoice_exception_poc_a"
+            / "evaluation"
+            / "dataset_pack"
+            / "cases"
+            / "mixed_signal_ambiguous.json"
+        )
+        loaded_case = load_case(dataset_case)
+        self.assertEqual(loaded_case["case_id"], "EVAL-AMBIG-001")
+        self.assertIn("invoice", loaded_case)
+        self.assertIn("po_summary", loaded_case)
+
     def test_wrapped_multi_case_payload_is_rejected(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
             json.dump({"cases": [{"case_id": "A"}, {"case_id": "B"}]}, handle)
@@ -2211,6 +2365,58 @@ class PocAScaffoldTests(unittest.TestCase):
             "invoice_exception_poc_a/evaluation/dataset_pack/cases/missing_po_simple.json",
             "invoice_exception_poc_a/evaluation/dataset_pack/cases/mixed_signal_ambiguous.json",
             "invoice_exception_poc_a/evaluation/dataset_pack/cases/insufficient_information_edge.json",
+        ]
+        for relative_path in documented_paths:
+            with self.subTest(path=relative_path):
+                self.assertIn(relative_path, readme_text)
+                self.assertTrue((ROOT / relative_path).exists())
+
+    def test_frontier_demo_script_artifact_exists(self) -> None:
+        script_path = ROOT / "invoice_exception_poc_a" / "evaluation" / "frontier_demo_script.md"
+        self.assertTrue(script_path.exists())
+
+    def test_frontier_demo_script_references_selected_case_set(self) -> None:
+        script_path = ROOT / "invoice_exception_poc_a" / "evaluation" / "frontier_demo_script.md"
+        script_text = script_path.read_text(encoding="utf-8")
+        referenced_paths = [
+            "samples/sample_case.json",
+            "invoice_exception_poc_a/evaluation/dataset_pack/cases/missing_po_simple.json",
+            "invoice_exception_poc_a/evaluation/dataset_pack/cases/mixed_signal_ambiguous.json",
+            "invoice_exception_poc_a/evaluation/dataset_pack/cases/insufficient_information_edge.json",
+        ]
+        for relative_path in referenced_paths:
+            with self.subTest(path=relative_path):
+                self.assertIn(relative_path, script_text)
+                self.assertTrue((ROOT / relative_path).exists())
+
+    def test_frontier_demo_script_contains_required_framing_and_sections(self) -> None:
+        script_path = ROOT / "invoice_exception_poc_a" / "evaluation" / "frontier_demo_script.md"
+        script_text = script_path.read_text(encoding="utf-8")
+        required_markers = [
+            "## Opening framing",
+            "deterministic",
+            "frontier",
+            "bounded judgment layer",
+            "not autonomous workflow execution",
+            "## Case-by-case talk track",
+            "### Case 1: Happy path / receiving mismatch",
+            "### Case 2: Missing PO",
+            "### Case 3: Mixed-signal ambiguous",
+            "### Case 4: Insufficient information / low-data edge",
+            "## Comparison interpretation",
+            "## Closing summary",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, script_text)
+
+    def test_readme_demo_script_section_references_valid_paths(self) -> None:
+        readme_path = ROOT / "README.md"
+        readme_text = readme_path.read_text(encoding="utf-8")
+        self.assertIn("## Frontier Demo Script", readme_text)
+        documented_paths = [
+            "invoice_exception_poc_a/evaluation/frontier_demo_script.md",
+            "invoice_exception_poc_a/evaluation/frontier_demo_case_set.json",
         ]
         for relative_path in documented_paths:
             with self.subTest(path=relative_path):
