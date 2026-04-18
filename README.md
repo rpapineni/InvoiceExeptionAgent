@@ -294,6 +294,19 @@ Reference ADR:
 
 - [ADR-0019-poc-b-reviewed-case-summary-model.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0019-poc-b-reviewed-case-summary-model.md)
 
+## PoC B Similar-Case Retrieval Contract
+
+PoC B also defines a bounded similar-case retrieval contract for representing reusable artifacts that may later be fetched during case handling.
+
+- It supports reviewed-case summaries, policy snippets, vendor patterns, and routing precedents as bounded retrieval source types
+- It defines retrieval scope, source type, source reference, source summary, and relevance hints without implementing live retrieval
+- It remains compatible with knowledge memory, decision memory, and reviewed-case summaries
+- It does not imply live retrieval, ranking, replay, learning metrics, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0020-poc-b-similar-case-retrieval-contract.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0020-poc-b-similar-case-retrieval-contract.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

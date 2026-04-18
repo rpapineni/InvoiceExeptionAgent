@@ -61,6 +61,7 @@ from invoice_exception_poc_a.guardrails.policy import (
 from invoice_exception_poc_a.intake.contract import OPTIONAL_TOP_LEVEL_FIELDS, REQUIRED_TOP_LEVEL_FIELDS
 from invoice_exception_poc_a.intake.service import build_case_envelope, load_case, validate_case_payload
 from invoice_exception_poc_a.memory import (
+    ALLOWED_RETRIEVAL_SOURCE_TYPES,
     DECISION_MEMORY_REQUIRED_FIELDS,
     EVALUATION_MEMORY_REQUIRED_FIELDS,
     KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
@@ -68,17 +69,20 @@ from invoice_exception_poc_a.memory import (
     REVIEWED_CASE_WRITEBACK_REQUIRED_FIELDS,
     REVIEWED_CASE_SUMMARY_REQUIRED_FIELDS,
     REVIEWED_OUTCOME_PERSISTENCE_REQUIRED_SIGNALS,
+    RETRIEVAL_CONTRACT_REQUIRED_FIELDS,
     SESSION_MEMORY_REQUIRED_FIELDS,
     build_decision_memory,
     build_evaluation_memory,
     build_knowledge_memory,
     build_reviewed_case_summary,
+    build_similar_case_retrieval_artifact,
     build_session_memory,
     persist_reviewed_outcome_to_decision_memory,
     validate_decision_memory,
     validate_evaluation_memory,
     validate_knowledge_memory,
     validate_reviewed_case_summary,
+    validate_similar_case_retrieval_artifact,
     validate_reviewed_case_writeback,
     validate_session_memory,
 )
@@ -2755,6 +2759,121 @@ class PocAScaffoldTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "disallowed"):
             validate_reviewed_case_summary(summary)
+
+    def test_poc_b_similar_case_retrieval_contract_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0020-poc-b-similar-case-retrieval-contract.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_similar_case_retrieval_contract_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0020-poc-b-similar-case-retrieval-contract.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "bounded structure for what may be retrieved later",
+            "reviewed_case_summary",
+            "policy_snippet",
+            "vendor_pattern",
+            "routing_precedent",
+            "retrieval_scope",
+            "source_type",
+            "source_ref",
+            "source_summary",
+            "relevance_hint",
+            "knowledge-memory artifacts",
+            "decision-memory artifacts",
+            "reviewed-case summaries",
+            "does not implement live retrieval execution, ranking or scoring logic, replay execution, learning-metric aggregation, or autonomous workflow behavior",
+            "human-review-centered posture",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_retrieval_contract_supports_reviewed_case_summary_artifact(self) -> None:
+        reviewed_case_summary = build_reviewed_case_summary(
+            decision_memory=self._build_decision_memory_for_summary()
+        )
+        artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="similar_case_reuse",
+            source_type="reviewed_case_summary",
+            source_ref="CASE-SUMMARY-001",
+            source_summary=reviewed_case_summary["normalized_case_pattern"],
+            relevance_hint=reviewed_case_summary["confidence_hint"],
+            source_payload=reviewed_case_summary,
+            precedent_ref=reviewed_case_summary["routing_precedent"],
+        )
+
+        validated = validate_similar_case_retrieval_artifact(artifact)
+        for field_name in RETRIEVAL_CONTRACT_REQUIRED_FIELDS:
+            self.assertIn(field_name, validated)
+        self.assertIn(validated["source_type"], ALLOWED_RETRIEVAL_SOURCE_TYPES)
+
+    def test_retrieval_contract_supports_policy_snippet_artifact(self) -> None:
+        artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="policy_context",
+            source_type="policy_snippet",
+            source_ref="POL-001",
+            source_summary="Tolerance policy for invoice-vs-PO mismatches.",
+            relevance_hint="useful_when=tolerance_exception",
+            source_payload={"policy_ref": "POL-001", "snippet": "Review tolerance threshold before routing."},
+            policy_ref="POL-001",
+        )
+
+        self.assertEqual(artifact["source_type"], "policy_snippet")
+        self.assertEqual(artifact["policy_ref"], "POL-001")
+
+    def test_retrieval_contract_supports_vendor_pattern_artifact(self) -> None:
+        artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="vendor_pattern_context",
+            source_type="vendor_pattern",
+            source_ref="VENDOR-PATTERN-001",
+            source_summary="Supplier North often requires vendor-master review for mismatch cases.",
+            relevance_hint="useful_when=vendor_mismatch",
+            source_payload={"vendor_id": "V-200", "vendor_name": "Supplier North"},
+            vendor_ref="V-200",
+        )
+
+        self.assertEqual(artifact["source_type"], "vendor_pattern")
+        self.assertEqual(artifact["vendor_ref"], "V-200")
+
+    def test_retrieval_contract_supports_routing_precedent_artifact(self) -> None:
+        artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="routing_precedent_context",
+            source_type="routing_precedent",
+            source_ref="ROUTE-001",
+            source_summary="Vendor mismatch with verified profile routes to vendor_master_team.",
+            relevance_hint="useful_when=owner_routing_ambiguous",
+            source_payload={"owner": "vendor_master_team", "precedent_ref": "ROUTE-001"},
+            precedent_ref="ROUTE-001",
+        )
+
+        self.assertEqual(artifact["source_type"], "routing_precedent")
+        self.assertEqual(artifact["precedent_ref"], "ROUTE-001")
+
+    def test_retrieval_contract_missing_required_field_fails_clearly(self) -> None:
+        artifact = {
+            "retrieval_scope": "similar_case_reuse",
+            "source_type": "policy_snippet",
+            "source_ref": "POL-001",
+            "source_summary": "Tolerance policy.",
+        }
+
+        with self.assertRaisesRegex(ValueError, "relevance_hint"):
+            validate_similar_case_retrieval_artifact(artifact)
+
+    def test_retrieval_contract_rejects_unsafe_verbose_content(self) -> None:
+        artifact = {
+            "retrieval_scope": "similar_case_reuse",
+            "source_type": "reviewed_case_summary",
+            "source_ref": "CASE-SUMMARY-001",
+            "source_summary": "prompt dump from provider",
+            "relevance_hint": "useful_when=missing_po",
+        }
+
+        with self.assertRaisesRegex(ValueError, "disallowed"):
+            validate_similar_case_retrieval_artifact(artifact)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
