@@ -138,6 +138,19 @@ Reference ADR:
 
 - [ADR-0007-poc-b-reviewer-outcome-contract.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0007-poc-b-reviewer-outcome-contract.md)
 
+## PoC B Minimum Writeback Contract
+
+PoC B also defines the minimum structured writeback each reviewed case must contribute for later reusable workflow intelligence.
+
+- It includes reviewed-truth fields, routing-improvement fields, override rationale, decision traceability, reusable handling signals, and bounded usage support
+- It explicitly distinguishes field provenance across system prediction, reviewer-finalized outcome, and run/usage context
+- It is intended for structured and queryable reusable workflow intelligence, not generic chat-history capture
+- It does not imply that persistence, decision memory, retrieval, replay, learning metrics, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0008-poc-b-minimum-writeback-contract.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0008-poc-b-minimum-writeback-contract.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

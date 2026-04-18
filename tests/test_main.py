@@ -1535,6 +1535,52 @@ class PocAScaffoldTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, combined)
 
+    def test_poc_b_minimum_writeback_contract_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0008-poc-b-minimum-writeback-contract.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_minimum_writeback_contract_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0008-poc-b-minimum-writeback-contract.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "defines the minimum structured information that every reviewed case must contribute",
+            "`predicted_label`",
+            "`final_label`",
+            "`predicted_owner`",
+            "`final_owner`",
+            "`override_flag`",
+            "`override_notes`",
+            "`decision_path`",
+            "`evidence_sources`",
+            "`rule_hits`",
+            "`similar_case_refs`",
+            "`confidence`",
+            "`usage_summary`",
+            "System first-pass triage output contributes",
+            "Reviewer-finalized outcome contributes",
+            "Run and bounded usage context contributes",
+            "support calibration and reviewed-truth comparison",
+            "support routing improvement",
+            "support override learning",
+            "support path traceability",
+            "support repeated-pattern handling",
+            "support quality, cost, and calibration analysis",
+            "structured and queryable reusable workflow intelligence",
+            "not generic chat-history capture",
+            "does not implement persistence yet",
+            "does not implement decision memory yet",
+            "does not implement retrieval or replay yet",
+            "does not implement learning metrics yet",
+            "does not create autonomous downstream action",
+            "does not bypass human review",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
         request = FrontierJudgmentRequest(
