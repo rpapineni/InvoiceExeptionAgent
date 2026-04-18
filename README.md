@@ -113,6 +113,18 @@ Shape expectations:
 - `priority` is always one of `low`, `medium`, or `high`
 - Optional metadata does not replace the required baseline fields
 
+## PoC B Structured Output Extension
+
+PoC B preserves the existing PoC A-F structured triage contract and extends it rather than replacing it.
+
+- The inherited PoC A-F business fields remain the bounded baseline output
+- PoC B adds bounded extension fields for later learning-oriented traceability, including `decision_path`, `evidence_sources`, `confidence`, `rule_hits`, and `similar_case_refs`
+- These extension fields support traceability and future learning support, but they do not imply that reviewer writeback, memory, retrieval, replay, or autonomous behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0006-poc-b-structured-output-extension.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0006-poc-b-structured-output-extension.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.
