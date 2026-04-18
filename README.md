@@ -242,6 +242,19 @@ Reference ADR:
 
 - [ADR-0015-poc-b-evaluation-memory-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0015-poc-b-evaluation-memory-boundary.md)
 
+## PoC B Reviewer Feedback Capture Flow
+
+PoC B also defines a bounded reviewer feedback capture flow for structured human review after first-pass triage.
+
+- It supports bounded `accept_as_is`, `override_label`, `override_owner`, `reviewer_notes`, `ambiguous_or_novel_flag`, and `precedent_usefulness_flag`
+- It remains compatible with the reviewer outcome contract, minimum writeback needs, and later decision-memory persistence
+- It preserves the AP analyst as final decision-maker and keeps the pilot human-review-centered
+- It does not imply full decision-memory persistence orchestration, retrieval, replay, learning metrics, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0016-poc-b-reviewer-feedback-capture-flow.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0016-poc-b-reviewer-feedback-capture-flow.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

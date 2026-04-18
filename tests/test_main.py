@@ -92,6 +92,11 @@ from invoice_exception_poc_a.telemetry import (
     validate_decision_path_telemetry,
 )
 from invoice_exception_poc_a.normalization.service import normalize_case
+from invoice_exception_poc_a.review import (
+    REVIEWER_FEEDBACK_REQUIRED_FIELDS,
+    build_reviewer_feedback,
+    validate_reviewer_feedback,
+)
 from invoice_exception_poc_a.triage.classifier import classify_primary_exception
 from invoice_exception_poc_a.triage.guidance import generate_reviewer_guidance
 from invoice_exception_poc_a.triage.model import EXCEPTION_TAXONOMY, OWNER_CATEGORIES
@@ -2201,6 +2206,113 @@ class PocAScaffoldTests(unittest.TestCase):
         del payload["failure_taxonomy"]
         with self.assertRaisesRegex(ValueError, "failure_taxonomy"):
             validate_evaluation_memory(payload)
+
+    def test_poc_b_reviewer_feedback_capture_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0016-poc-b-reviewer-feedback-capture-flow.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_reviewer_feedback_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0016-poc-b-reviewer-feedback-capture-flow.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "structured result of human review after first-pass triage",
+            "`accept_as_is`",
+            "`override_label`",
+            "`override_owner`",
+            "`reviewer_notes`",
+            "`ambiguous_or_novel_flag`",
+            "`precedent_usefulness_flag`",
+            "reviewer outcome contract",
+            "minimum writeback contract",
+            "later decision-memory persistence",
+            "The AP analyst remains the final decision-maker during the pilot",
+            "does not implement full decision-memory persistence orchestration, retrieval behavior, replay execution, learning-metric aggregation, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_reviewer_feedback_supports_accept_as_is(self) -> None:
+        feedback = build_reviewer_feedback(
+            predicted_label="missing_po",
+            predicted_owner="buyer_procurement",
+            accept_as_is=True,
+            final_label="missing_po",
+            final_owner="buyer_procurement",
+            reviewer_notes="Recommendation accepted as-is.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+        )
+        validated = validate_reviewer_feedback(feedback)
+        self.assertTrue(validated["accept_as_is"])
+        self.assertFalse(validated["override_flag"])
+
+    def test_reviewer_feedback_supports_label_override(self) -> None:
+        feedback = build_reviewer_feedback(
+            predicted_label="insufficient_information",
+            predicted_owner="exception_review_queue",
+            accept_as_is=False,
+            final_label="receiving_mismatch",
+            final_owner="exception_review_queue",
+            reviewer_notes="Receipt evidence was available after review.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+            override_label="receiving_mismatch",
+            override_notes="Changed label after confirming receipt mismatch.",
+        )
+        validated = validate_reviewer_feedback(feedback)
+        self.assertTrue(validated["override_flag"])
+        self.assertEqual(validated["final_label"], "receiving_mismatch")
+
+    def test_reviewer_feedback_supports_owner_override(self) -> None:
+        feedback = build_reviewer_feedback(
+            predicted_label="vendor_mismatch",
+            predicted_owner="exception_review_queue",
+            accept_as_is=False,
+            final_label="vendor_mismatch",
+            final_owner="vendor_master_team",
+            reviewer_notes="Vendor master team should resolve this exception.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+            override_owner="vendor_master_team",
+            override_notes="Changed owner after vendor profile review.",
+        )
+        validated = validate_reviewer_feedback(feedback)
+        self.assertTrue(validated["override_flag"])
+        self.assertEqual(validated["final_owner"], "vendor_master_team")
+
+    def test_reviewer_feedback_supports_notes_ambiguity_and_precedent_flags(self) -> None:
+        feedback = build_reviewer_feedback(
+            predicted_label="terms_mismatch",
+            predicted_owner="ap_exception_queue",
+            accept_as_is=False,
+            final_label="terms_mismatch",
+            final_owner="ap_exception_queue",
+            reviewer_notes="Novel contract language made this case ambiguous but potentially useful as precedent.",
+            ambiguous_or_novel_flag=True,
+            precedent_usefulness_flag=True,
+        )
+        validated = validate_reviewer_feedback(feedback)
+        self.assertTrue(validated["ambiguous_or_novel_flag"])
+        self.assertTrue(validated["precedent_usefulness_flag"])
+
+    def test_reviewer_feedback_missing_required_field_fails_clearly(self) -> None:
+        feedback = build_reviewer_feedback(
+            predicted_label="missing_po",
+            predicted_owner="buyer_procurement",
+            accept_as_is=True,
+            final_label="missing_po",
+            final_owner="buyer_procurement",
+            reviewer_notes="Accepted.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=False,
+        )
+        del feedback["reviewer_notes"]
+        with self.assertRaisesRegex(ValueError, "reviewer_notes"):
+            validate_reviewer_feedback(feedback)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
