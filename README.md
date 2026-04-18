@@ -307,6 +307,19 @@ Reference ADR:
 
 - [ADR-0020-poc-b-similar-case-retrieval-contract.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0020-poc-b-similar-case-retrieval-contract.md)
 
+## PoC B Vendor Exception Profile Model
+
+PoC B also defines a bounded vendor exception profile model for recurring vendor-specific exception behavior.
+
+- It supports vendor reference, common exception types, routing tendency, override tendency, terms mismatch tendency, confidence trend, and remediation tendency
+- It remains compatible with decision memory, reviewed-case summaries, and the similar-case retrieval contract's `vendor_pattern` artifact type
+- It represents reusable vendor patterns rather than raw traces, provider dumps, or unstructured history
+- It does not imply live retrieval, ranking, replay, learning metrics, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0021-poc-b-vendor-exception-profile-model.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0021-poc-b-vendor-exception-profile-model.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

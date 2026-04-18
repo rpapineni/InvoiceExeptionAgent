@@ -71,12 +71,14 @@ from invoice_exception_poc_a.memory import (
     REVIEWED_OUTCOME_PERSISTENCE_REQUIRED_SIGNALS,
     RETRIEVAL_CONTRACT_REQUIRED_FIELDS,
     SESSION_MEMORY_REQUIRED_FIELDS,
+    VENDOR_EXCEPTION_PROFILE_REQUIRED_FIELDS,
     build_decision_memory,
     build_evaluation_memory,
     build_knowledge_memory,
     build_reviewed_case_summary,
     build_similar_case_retrieval_artifact,
     build_session_memory,
+    build_vendor_exception_profile,
     persist_reviewed_outcome_to_decision_memory,
     validate_decision_memory,
     validate_evaluation_memory,
@@ -85,6 +87,7 @@ from invoice_exception_poc_a.memory import (
     validate_similar_case_retrieval_artifact,
     validate_reviewed_case_writeback,
     validate_session_memory,
+    validate_vendor_exception_profile,
 )
 from invoice_exception_poc_a.schema.frontier_parser import parse_frontier_judgment_to_poc_a_output
 from invoice_exception_poc_a.schema.frontier_parser import normalize_frontier_judgment_for_validation
@@ -2874,6 +2877,152 @@ class PocAScaffoldTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "disallowed"):
             validate_similar_case_retrieval_artifact(artifact)
+
+    def test_poc_b_vendor_exception_profile_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0021-poc-b-vendor-exception-profile-model.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_vendor_exception_profile_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0021-poc-b-vendor-exception-profile-model.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "recurring vendor-specific exception behavior as reusable workflow intelligence",
+            "vendor_ref",
+            "common_exception_types",
+            "routing_tendency",
+            "override_tendency",
+            "terms_mismatch_tendency",
+            "confidence_trend",
+            "remediation_tendency",
+            "decision-memory reviewed outcomes",
+            "reviewed-case summaries",
+            "vendor_pattern",
+            "does not implement live retrieval behavior, ranking or scoring, replay execution, learning-metric aggregation, or autonomous workflow behavior",
+            "human-review-centered posture",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_vendor_exception_profile_supports_common_exception_types_and_vendor_ref(self) -> None:
+        profile = build_vendor_exception_profile(
+            decision_memory=self._build_decision_memory_for_summary(
+                vendor_exception_profile={
+                    "vendor_id": "V-200",
+                    "vendor_name": "Supplier North",
+                    "profile_scope": "vendor_exception_pattern",
+                }
+            ),
+            reviewed_case_summary=build_reviewed_case_summary(
+                decision_memory=self._build_decision_memory_for_summary(
+                    vendor_exception_profile={
+                        "vendor_id": "V-200",
+                        "vendor_name": "Supplier North",
+                        "profile_scope": "vendor_exception_pattern",
+                    }
+                )
+            ),
+        )
+        validated = validate_vendor_exception_profile(profile)
+
+        self.assertEqual(validated["vendor_ref"], "V-200")
+        self.assertIn("missing_po", validated["common_exception_types"])
+        for field_name in VENDOR_EXCEPTION_PROFILE_REQUIRED_FIELDS:
+            self.assertIn(field_name, validated)
+
+    def test_vendor_exception_profile_supports_routing_tendency(self) -> None:
+        decision_memory = self._build_decision_memory_for_summary(
+            predicted_label="vendor_mismatch",
+            predicted_owner="exception_review_queue",
+            final_label="vendor_mismatch",
+            final_owner="vendor_master_team",
+            decision_path="hybrid",
+            reviewer_notes="Route to vendor master team.",
+            override_owner="vendor_master_team",
+            override_notes="Vendor master team owns remediation.",
+            vendor_exception_profile={
+                "vendor_id": "V-300",
+                "vendor_name": "Supplier East",
+                "profile_scope": "vendor_exception_pattern",
+            },
+        )
+        summary = build_reviewed_case_summary(decision_memory=decision_memory)
+        profile = build_vendor_exception_profile(
+            decision_memory=decision_memory,
+            reviewed_case_summary=summary,
+        )
+
+        self.assertEqual(profile["routing_tendency"], "vendor_master_team|path=hybrid")
+
+    def test_vendor_exception_profile_supports_override_and_terms_mismatch_tendency(self) -> None:
+        profile = build_vendor_exception_profile(
+            decision_memory=self._build_decision_memory_for_summary(
+                predicted_label="terms_mismatch",
+                predicted_owner="exception_review_queue",
+                final_label="terms_mismatch",
+                final_owner="buyer_procurement",
+                decision_path="full_reasoning",
+                reviewer_notes="Terms mismatch confirmed.",
+                override_owner="buyer_procurement",
+                override_notes="Buyer team should resolve terms mismatch.",
+                vendor_exception_profile={
+                    "vendor_id": "V-400",
+                    "vendor_name": "Supplier West",
+                    "profile_scope": "vendor_exception_pattern",
+                },
+            )
+        )
+
+        self.assertEqual(profile["override_tendency"], "override_common")
+        self.assertEqual(profile["terms_mismatch_tendency"], "recurring_terms_mismatch")
+
+    def test_vendor_exception_profile_supports_confidence_and_remediation_tendency(self) -> None:
+        decision_memory = self._build_decision_memory_for_summary(
+            predicted_label="missing_po",
+            predicted_owner="buyer_procurement",
+            final_label="missing_po",
+            final_owner="buyer_procurement",
+            confidence="high",
+            vendor_exception_profile={
+                "vendor_id": "V-500",
+                "vendor_name": "Supplier South",
+                "profile_scope": "vendor_exception_pattern",
+            },
+        )
+        profile = build_vendor_exception_profile(decision_memory=decision_memory)
+
+        self.assertEqual(profile["confidence_trend"], "high")
+        self.assertEqual(profile["remediation_tendency"], "missing_po")
+
+    def test_vendor_exception_profile_missing_required_field_fails_clearly(self) -> None:
+        profile = {
+            "vendor_ref": "V-200",
+            "common_exception_types": ["missing_po"],
+            "routing_tendency": "buyer_procurement|path=deterministic",
+            "override_tendency": "accept_as_recommended_common",
+            "terms_mismatch_tendency": "no_terms_mismatch_pattern",
+            "confidence_trend": "medium",
+        }
+
+        with self.assertRaisesRegex(ValueError, "remediation_tendency"):
+            validate_vendor_exception_profile(profile)
+
+    def test_vendor_exception_profile_rejects_unsafe_verbose_content(self) -> None:
+        profile = {
+            "vendor_ref": "V-200",
+            "common_exception_types": ["missing_po"],
+            "routing_tendency": "prompt dump attached",
+            "override_tendency": "accept_as_recommended_common",
+            "terms_mismatch_tendency": "no_terms_mismatch_pattern",
+            "confidence_trend": "medium",
+            "remediation_tendency": "missing_po",
+        }
+
+        with self.assertRaisesRegex(ValueError, "disallowed"):
+            validate_vendor_exception_profile(profile)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
