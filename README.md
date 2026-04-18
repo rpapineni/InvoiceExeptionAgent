@@ -267,6 +267,19 @@ Reference ADR:
 
 - [ADR-0003-poc-a-f-architectural-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0003-poc-a-f-architectural-boundary.md)
 
+## PoC B Working Model
+
+PoC B is a learning-oriented extension on top of the PoC A-F bounded triage baseline. It is not a rebuild and it does not replace the existing first-pass triage foundation.
+
+- PoC A-F continues to own the bounded one-case-in / one-triage-out workflow, structured triage contract, human-review orientation, validation/control boundaries, bounded trace, and non-autonomous pilot posture
+- PoC B will add reviewer outcome capture, reusable workflow memory, similar-case reuse, replay/evaluation memory, and measurable learning evidence in later stories
+- PoC B must still preserve bounded triage, human review, and non-autonomous pilot boundaries
+- CODEX must implement only the active story, must not pull future scope forward, and must preserve PoC A-F baseline behavior unless a story explicitly changes it
+
+Reference ADR:
+
+- [ADR-0004-poc-b-working-model.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0004-poc-b-working-model.md)
+
 ## Frontier Adapter Layer
 
 PoC A-F now reserves a provider-agnostic frontier adapter layer so provider access stays outside business modules.

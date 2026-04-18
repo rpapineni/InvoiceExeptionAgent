@@ -1388,6 +1388,44 @@ class PocAScaffoldTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, combined)
 
+    def test_poc_b_working_model_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0004-poc-b-working-model.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_working_model_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0004-poc-b-working-model.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "PoC A-F is the inherited baseline for PoC B",
+            "PoC B extends PoC A-F rather than replacing it",
+            "one-case-in / one-triage-out bounded workflow",
+            "structured triage recommendation contract",
+            "human-review orientation",
+            "bounded execution trace",
+            "validation and control boundaries",
+            "non-autonomous pilot posture",
+            "reviewer outcome capture",
+            "reusable workflow memory",
+            "similar-case and prior-pattern reuse",
+            "replay and evaluation memory",
+            "measurable learning evidence",
+            "Implement only the active story and nothing beyond it",
+            "Do not pull future scope forward",
+            "Preserve PoC A-F baseline behavior unless the active story explicitly changes it",
+            "Deliver PoC B one story at a time, with review between stories",
+            "autonomous routing",
+            "payment action",
+            "ERP posting",
+            "silent auto-resolution of ambiguous cases",
+            "unbounded cross-case agent behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
         request = FrontierJudgmentRequest(
