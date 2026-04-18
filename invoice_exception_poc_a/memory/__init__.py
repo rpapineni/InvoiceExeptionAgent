@@ -7,6 +7,12 @@ from invoice_exception_poc_a.memory.decision import (
     build_decision_memory,
     validate_decision_memory,
 )
+from invoice_exception_poc_a.memory.evaluation import (
+    EVALUATION_MEMORY_REQUIRED_FIELDS,
+    PocBEvaluationMemory,
+    build_evaluation_memory,
+    validate_evaluation_memory,
+)
 from invoice_exception_poc_a.memory.knowledge import (
     KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
     PocBKnowledgeMemory,
@@ -22,16 +28,20 @@ from invoice_exception_poc_a.memory.model import (
 
 __all__ = [
     "DECISION_MEMORY_REQUIRED_FIELDS",
+    "EVALUATION_MEMORY_REQUIRED_FIELDS",
     "KNOWLEDGE_MEMORY_REQUIRED_FIELDS",
     "MINIMUM_WRITEBACK_COMPATIBILITY_FIELDS",
     "PocBDecisionMemory",
+    "PocBEvaluationMemory",
     "PocBKnowledgeMemory",
     "PocBSessionMemory",
     "SESSION_MEMORY_REQUIRED_FIELDS",
     "build_decision_memory",
+    "build_evaluation_memory",
     "build_knowledge_memory",
     "build_session_memory",
     "validate_decision_memory",
+    "validate_evaluation_memory",
     "validate_knowledge_memory",
     "validate_session_memory",
 ]

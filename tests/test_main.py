@@ -62,13 +62,16 @@ from invoice_exception_poc_a.intake.contract import OPTIONAL_TOP_LEVEL_FIELDS, R
 from invoice_exception_poc_a.intake.service import build_case_envelope, load_case, validate_case_payload
 from invoice_exception_poc_a.memory import (
     DECISION_MEMORY_REQUIRED_FIELDS,
+    EVALUATION_MEMORY_REQUIRED_FIELDS,
     KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
     MINIMUM_WRITEBACK_COMPATIBILITY_FIELDS,
     SESSION_MEMORY_REQUIRED_FIELDS,
     build_decision_memory,
+    build_evaluation_memory,
     build_knowledge_memory,
     build_session_memory,
     validate_decision_memory,
+    validate_evaluation_memory,
     validate_knowledge_memory,
     validate_session_memory,
 )
@@ -2097,6 +2100,107 @@ class PocAScaffoldTests(unittest.TestCase):
         del payload["writeback_compatibility"]
         with self.assertRaisesRegex(ValueError, "writeback_compatibility"):
             validate_decision_memory(payload)
+
+    def test_poc_b_evaluation_memory_boundary_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0015-poc-b-evaluation-memory-boundary.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_evaluation_memory_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0015-poc-b-evaluation-memory-boundary.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "structured evaluation artifacts",
+            "`benchmark_case_set`",
+            "`repeated_pattern_case_set`",
+            "`replay_cases`",
+            "`regression_history`",
+            "`failure_taxonomy`",
+            "benchmark comparison",
+            "repeated-pattern evaluation",
+            "replay-from-correction artifacts",
+            "regression tracking",
+            "failure classification",
+            "not current-run session continuity",
+            "not retrieval-oriented knowledge context",
+            "not reviewed-outcome truth storage",
+            "not generic chat history",
+            "session memory for in-flight run continuity",
+            "knowledge memory for retrieval-oriented business context",
+            "decision memory for reviewed outcomes",
+            "structured and queryable evaluation artifacts",
+            "does not implement replay execution, learning-metric aggregation, retrieval behavior, reviewer writeback orchestration, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_evaluation_memory_supports_benchmark_case_set(self) -> None:
+        evaluation_memory = build_evaluation_memory(
+            benchmark_case_set=[{"case_id": "BENCH-001", "bucket": "simple_obvious"}],
+            repeated_pattern_case_set=[{"pattern_id": "RP-001", "theme": "missing_po"}],
+            replay_cases=[{"replay_id": "REPLAY-001", "source_case_id": "CASE-001"}],
+            regression_history=[{"run_id": "RUN-001", "status": "stable"}],
+            failure_taxonomy=[{"failure_code": "FT-001", "category": "classification_error"}],
+        )
+        validated = validate_evaluation_memory(evaluation_memory)
+        self.assertEqual(validated["benchmark_case_set"][0]["case_id"], "BENCH-001")
+
+    def test_evaluation_memory_supports_repeated_pattern_case_set(self) -> None:
+        evaluation_memory = build_evaluation_memory(
+            benchmark_case_set=[{"case_id": "BENCH-002", "bucket": "moderately_ambiguous"}],
+            repeated_pattern_case_set=[{"pattern_id": "RP-002", "theme": "vendor_mismatch"}],
+            replay_cases=[{"replay_id": "REPLAY-002", "source_case_id": "CASE-002"}],
+            regression_history=[{"run_id": "RUN-002", "status": "stable"}],
+            failure_taxonomy=[{"failure_code": "FT-002", "category": "routing_error"}],
+        )
+        validated = validate_evaluation_memory(evaluation_memory)
+        self.assertEqual(validated["repeated_pattern_case_set"][0]["pattern_id"], "RP-002")
+
+    def test_evaluation_memory_supports_replay_cases_and_regression_history(self) -> None:
+        evaluation_memory = build_evaluation_memory(
+            benchmark_case_set=[{"case_id": "BENCH-003", "bucket": "edge_low_data"}],
+            repeated_pattern_case_set=[{"pattern_id": "RP-003", "theme": "insufficient_information"}],
+            replay_cases=[
+                {"replay_id": "REPLAY-003", "source_case_id": "CASE-003", "correction_type": "owner_override"}
+            ],
+            regression_history=[
+                {"run_id": "RUN-003", "status": "regressed"},
+                {"run_id": "RUN-004", "status": "recovered"},
+            ],
+            failure_taxonomy=[{"failure_code": "FT-003", "category": "uncertainty_handling_gap"}],
+        )
+        validated = validate_evaluation_memory(evaluation_memory)
+        self.assertEqual(validated["replay_cases"][0]["replay_id"], "REPLAY-003")
+        self.assertEqual(len(validated["regression_history"]), 2)
+
+    def test_evaluation_memory_supports_failure_taxonomy(self) -> None:
+        evaluation_memory = build_evaluation_memory(
+            benchmark_case_set=[{"case_id": "BENCH-004", "bucket": "simple_obvious"}],
+            repeated_pattern_case_set=[{"pattern_id": "RP-004", "theme": "receiving_mismatch"}],
+            replay_cases=[{"replay_id": "REPLAY-004", "source_case_id": "CASE-004"}],
+            regression_history=[{"run_id": "RUN-005", "status": "stable"}],
+            failure_taxonomy=[
+                {"failure_code": "FT-004", "category": "owner_misroute"},
+                {"failure_code": "FT-005", "category": "missing_question_surface"},
+            ],
+        )
+        validated = validate_evaluation_memory(evaluation_memory)
+        self.assertEqual(len(validated["failure_taxonomy"]), 2)
+
+    def test_evaluation_memory_missing_required_field_fails_clearly(self) -> None:
+        payload = build_evaluation_memory(
+            benchmark_case_set=[{"case_id": "BENCH-005", "bucket": "moderately_ambiguous"}],
+            repeated_pattern_case_set=[{"pattern_id": "RP-005", "theme": "amount_mismatch"}],
+            replay_cases=[{"replay_id": "REPLAY-005", "source_case_id": "CASE-005"}],
+            regression_history=[{"run_id": "RUN-006", "status": "stable"}],
+            failure_taxonomy=[{"failure_code": "FT-006", "category": "summary_clarity_gap"}],
+        )
+        del payload["failure_taxonomy"]
+        with self.assertRaisesRegex(ValueError, "failure_taxonomy"):
+            validate_evaluation_memory(payload)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()

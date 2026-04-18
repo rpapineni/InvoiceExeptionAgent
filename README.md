@@ -229,6 +229,19 @@ Reference ADR:
 
 - [ADR-0014-poc-b-decision-memory-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0014-poc-b-decision-memory-boundary.md)
 
+## PoC B Evaluation Memory Boundary
+
+PoC B also defines a bounded evaluation-memory boundary for structured evaluation artifacts.
+
+- It supports bounded `benchmark_case_set`, `repeated_pattern_case_set`, `replay_cases`, `regression_history`, and `failure_taxonomy`
+- It is intended for structured and queryable benchmarking, repeated-pattern analysis, replay-artifact tracking, regression history, and failure classification
+- It is explicitly separate from session memory, knowledge memory, and decision memory
+- It does not imply replay execution, learning-metric aggregation, retrieval behavior, reviewer writeback orchestration, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0015-poc-b-evaluation-memory-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0015-poc-b-evaluation-memory-boundary.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.
