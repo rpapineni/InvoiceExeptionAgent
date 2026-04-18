@@ -1426,6 +1426,46 @@ class PocAScaffoldTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, combined)
 
+    def test_poc_b_architectural_boundary_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0005-poc-b-architectural-boundary.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_architectural_boundary_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0005-poc-b-architectural-boundary.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "PoC A-F remains the bounded triage foundation",
+            "PoC B is a learning-oriented layer around that foundation, not a replacement for it",
+            "one-case-in / one-triage-out bounded triage flow",
+            "reviewer-oriented structured recommendation contract",
+            "orchestration",
+            "input and output contracts",
+            "validation and bounded repair behavior",
+            "metadata and bounded trace posture",
+            "pilot control boundaries",
+            "reviewer outcome capture after triage",
+            "reusable workflow memory",
+            "decision memory for reviewed outcomes",
+            "knowledge memory for retrieval-oriented context",
+            "evaluation memory for replay and regression",
+            "similar-case reuse",
+            "learning-oriented observability and improvement evidence",
+            "The AP analyst remains in control of the final handling decision during this pilot",
+            "autonomous routing",
+            "payment action",
+            "ERP posting",
+            "outbound financial execution",
+            "silent auto-resolution of ambiguous cases",
+            "unbounded cross-case agent behavior",
+            "open-ended tool orchestration beyond bounded pilot scope",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
         request = FrontierJudgmentRequest(

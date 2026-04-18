@@ -280,6 +280,19 @@ Reference ADR:
 
 - [ADR-0004-poc-b-working-model.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0004-poc-b-working-model.md)
 
+## PoC B Architectural Boundary
+
+PoC B is a learning-oriented layer around the PoC A-F bounded triage foundation, not a replacement architecture.
+
+- Deterministic and system-owned layers continue to own orchestration, contracts, validation, bounded repair, metadata, trace, and pilot control boundaries
+- PoC B may add reviewer outcome capture, reusable memory, similar-case reuse, replay/evaluation memory, and learning-oriented observability later
+- Human review remains mandatory and the AP analyst remains the final decision-maker during the pilot
+- PoC B still excludes autonomous routing, payment action, ERP posting, silent auto-resolution, and unbounded cross-case agent behavior
+
+Reference ADR:
+
+- [ADR-0005-poc-b-architectural-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0005-poc-b-architectural-boundary.md)
+
 ## Frontier Adapter Layer
 
 PoC A-F now reserves a provider-agnostic frontier adapter layer so provider access stays outside business modules.
