@@ -164,6 +164,19 @@ Reference ADR:
 
 - [ADR-0009-poc-b-decision-ladder.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0009-poc-b-decision-ladder.md)
 
+## PoC B Decision-Path Telemetry Contract
+
+PoC B also defines a bounded telemetry contract for observing which decision-ladder path was used and how escalation occurred.
+
+- It includes `selected_path`, `path_transitions`, `escalation_reason`, `retry_count`, `latency_ms`, `human_review_required`, and `usage_summary`
+- It supports all four documented PoC B paths: deterministic, retrieval-assisted, full reasoning, and hybrid
+- It captures usage in bounded summary form only and does not require chain-of-thought or raw provider internals
+- It does not imply that bounded trace stages, retrieval, replay, memory, writeback persistence, learning-metric aggregation, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0010-poc-b-decision-path-telemetry-contract.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0010-poc-b-decision-path-telemetry-contract.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

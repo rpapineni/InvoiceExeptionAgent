@@ -69,6 +69,12 @@ from invoice_exception_poc_a.schema.model import (
 )
 from invoice_exception_poc_a.schema.output import SCHEMA_VERSION, build_placeholder_output
 from invoice_exception_poc_a.schema.validation import validate_output_payload
+from invoice_exception_poc_a.telemetry import (
+    ALLOWED_DECISION_PATHS,
+    DECISION_PATH_TELEMETRY_REQUIRED_FIELDS,
+    build_decision_path_telemetry,
+    validate_decision_path_telemetry,
+)
 from invoice_exception_poc_a.normalization.service import normalize_case
 from invoice_exception_poc_a.triage.classifier import classify_primary_exception
 from invoice_exception_poc_a.triage.guidance import generate_reviewer_guidance
@@ -1615,6 +1621,110 @@ class PocAScaffoldTests(unittest.TestCase):
         for marker in required_markers:
             with self.subTest(marker=marker):
                 self.assertIn(marker, combined)
+
+    def test_poc_b_decision_path_telemetry_contract_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0010-poc-b-decision-path-telemetry-contract.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_decision_path_telemetry_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (
+            ROOT / "docs" / "adr" / "ADR-0010-poc-b-decision-path-telemetry-contract.md"
+        ).read_text(encoding="utf-8")
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "observe which decision path was used",
+            "`selected_path`",
+            "`path_transitions`",
+            "`escalation_reason`",
+            "`retry_count`",
+            "`latency_ms`",
+            "`human_review_required`",
+            "`usage_summary`",
+            "`deterministic`",
+            "`retrieval_assisted`",
+            "`full_reasoning`",
+            "`hybrid`",
+            "does not require verbose reasoning logs, chain-of-thought capture, or raw provider-internals storage",
+            "human review was required or involved",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_decision_path_telemetry_supports_deterministic_path(self) -> None:
+        telemetry = build_decision_path_telemetry(
+            selected_path="deterministic",
+            path_transitions=["deterministic"],
+            escalation_reason=None,
+            retry_count=0,
+            latency_ms=2.0,
+            human_review_required=True,
+            usage_summary={"token_usage": None, "compute_usage": None},
+            engine_mode="deterministic",
+            decision_path_version="poc-b-ladder-v1",
+        )
+        validated = validate_decision_path_telemetry(telemetry)
+        self.assertEqual(validated["selected_path"], "deterministic")
+
+    def test_decision_path_telemetry_supports_retrieval_assisted_path(self) -> None:
+        telemetry = build_decision_path_telemetry(
+            selected_path="retrieval_assisted",
+            path_transitions=["deterministic", "retrieval_assisted"],
+            escalation_reason="policy_context_helpful",
+            retry_count=0,
+            latency_ms=4.5,
+            human_review_required=True,
+            usage_summary={"retrieved_context_count": 2},
+            engine_mode="frontier",
+            path_confidence_source="retrieval_context",
+        )
+        validated = validate_decision_path_telemetry(telemetry)
+        self.assertEqual(validated["selected_path"], "retrieval_assisted")
+
+    def test_decision_path_telemetry_supports_full_reasoning_path(self) -> None:
+        telemetry = build_decision_path_telemetry(
+            selected_path="full_reasoning",
+            path_transitions=["deterministic", "full_reasoning"],
+            escalation_reason="ambiguous_conflicting_case",
+            retry_count=0,
+            latency_ms=8.0,
+            human_review_required=True,
+            usage_summary={"token_usage": None},
+            engine_mode="frontier",
+            path_confidence_source="reasoning_needed",
+        )
+        validated = validate_decision_path_telemetry(telemetry)
+        self.assertEqual(validated["selected_path"], "full_reasoning")
+
+    def test_decision_path_telemetry_supports_hybrid_path(self) -> None:
+        telemetry = build_decision_path_telemetry(
+            selected_path="hybrid",
+            path_transitions=["deterministic", "retrieval_assisted", "hybrid"],
+            escalation_reason="multiple_paths_contributed",
+            retry_count=1,
+            latency_ms=9.5,
+            human_review_required=True,
+            usage_summary={"token_usage": None, "retrieved_context_count": 1},
+            engine_mode="frontier",
+            bounded_notes=["Hybrid output preserved path influence."],
+        )
+        validated = validate_decision_path_telemetry(telemetry)
+        self.assertEqual(validated["selected_path"], "hybrid")
+
+    def test_decision_path_telemetry_missing_required_field_fails_clearly(self) -> None:
+        payload = build_decision_path_telemetry(
+            selected_path="deterministic",
+            path_transitions=["deterministic"],
+            escalation_reason=None,
+            retry_count=0,
+            latency_ms=2.0,
+            human_review_required=True,
+            usage_summary={"token_usage": None},
+        )
+        del payload["usage_summary"]
+        with self.assertRaisesRegex(ValueError, "usage_summary"):
+            validate_decision_path_telemetry(payload)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
