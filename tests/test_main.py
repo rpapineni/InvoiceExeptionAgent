@@ -1581,6 +1581,41 @@ class PocAScaffoldTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, combined)
 
+    def test_poc_b_decision_ladder_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0009-poc-b-decision-ladder.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_decision_ladder_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0009-poc-b-decision-ladder.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "defines the bounded handling paths PoC B may use",
+            "### Deterministic path",
+            "### Retrieval-assisted path",
+            "### Full reasoning path",
+            "### Hybrid handling",
+            "tolerance thresholds",
+            "terms mismatches",
+            "missing PO conditions",
+            "duplicate indicators",
+            "vendor consistency checks",
+            "Retrieved context is an input to recommendation quality, not autonomous authority",
+            "Full reasoning remains bounded, reviewer-oriented, and non-autonomous",
+            "traceability must preserve what influenced the recommendation",
+            "deterministic when the case is clear",
+            "retrieval-assisted when precedent or policy context is helpful",
+            "full reasoning when ambiguity, conflict, or novelty requires it",
+            "The AP analyst remains the final decision-maker during the pilot",
+            "does not authorize autonomous routing or payment action",
+            "does not implement telemetry, retrieval, bounded trace, replay, memory, reviewer writeback, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
         request = FrontierJudgmentRequest(

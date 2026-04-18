@@ -151,6 +151,19 @@ Reference ADR:
 
 - [ADR-0008-poc-b-minimum-writeback-contract.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0008-poc-b-minimum-writeback-contract.md)
 
+## PoC B Decision Ladder
+
+PoC B also defines a bounded decision ladder for how the system may handle a case while preserving the PoC A-F triage foundation and human-review posture.
+
+- It formalizes the deterministic, retrieval-assisted, full reasoning, and hybrid handling paths
+- It explains high-level escalation from lighter to heavier handling paths
+- It states that hybrid handling must preserve traceability of what influenced the recommendation
+- It does not imply that telemetry, retrieval, bounded trace, replay, memory, writeback, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0009-poc-b-decision-ladder.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0009-poc-b-decision-ladder.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.
