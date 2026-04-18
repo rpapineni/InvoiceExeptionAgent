@@ -255,6 +255,32 @@ Reference ADR:
 
 - [ADR-0016-poc-b-reviewer-feedback-capture-flow.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0016-poc-b-reviewer-feedback-capture-flow.md)
 
+## PoC B Reviewed-Outcome Persistence
+
+PoC B also defines a bounded persistence seam that converts reviewed case outcomes into valid decision-memory records.
+
+- It reuses the existing decision-memory schema rather than creating a competing model
+- It preserves predicted versus final label and owner distinctions, override semantics, and minimum writeback-compatible signals
+- It returns validated decision-memory records for later reusable workflow intelligence
+- It does not imply retrieval, replay, learning metrics, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0017-poc-b-reviewed-outcome-persistence.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0017-poc-b-reviewed-outcome-persistence.md)
+
+## PoC B Writeback Validation And Auditability
+
+PoC B also defines a bounded validation seam that checks reviewed-case writeback completeness before decision-memory acceptance.
+
+- It validates predicted/final label and owner, override behavior, decision path, evidence sources, rule hits, similar-case refs, confidence, and usage summary
+- It fails clearly and auditably on incomplete or malformed reviewed-case writeback
+- It remains compatible with reviewer feedback capture, reviewed-outcome persistence, and the decision-memory schema
+- It does not imply retrieval, replay, learning metrics, evaluation orchestration, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0018-poc-b-writeback-validation-and-auditability.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0018-poc-b-writeback-validation-and-auditability.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

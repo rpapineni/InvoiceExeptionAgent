@@ -65,14 +65,18 @@ from invoice_exception_poc_a.memory import (
     EVALUATION_MEMORY_REQUIRED_FIELDS,
     KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
     MINIMUM_WRITEBACK_COMPATIBILITY_FIELDS,
+    REVIEWED_CASE_WRITEBACK_REQUIRED_FIELDS,
+    REVIEWED_OUTCOME_PERSISTENCE_REQUIRED_SIGNALS,
     SESSION_MEMORY_REQUIRED_FIELDS,
     build_decision_memory,
     build_evaluation_memory,
     build_knowledge_memory,
     build_session_memory,
+    persist_reviewed_outcome_to_decision_memory,
     validate_decision_memory,
     validate_evaluation_memory,
     validate_knowledge_memory,
+    validate_reviewed_case_writeback,
     validate_session_memory,
 )
 from invoice_exception_poc_a.schema.frontier_parser import parse_frontier_judgment_to_poc_a_output
@@ -2313,6 +2317,340 @@ class PocAScaffoldTests(unittest.TestCase):
         del feedback["reviewer_notes"]
         with self.assertRaisesRegex(ValueError, "reviewer_notes"):
             validate_reviewer_feedback(feedback)
+
+    def test_poc_b_reviewed_outcome_persistence_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0017-poc-b-reviewed-outcome-persistence.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_reviewed_outcome_persistence_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0017-poc-b-reviewed-outcome-persistence.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "structured reviewed human feedback",
+            "structured first-pass triage output",
+            "structured reviewer feedback",
+            "minimum writeback-compatible signals",
+            "valid decision-memory record",
+            "reviewed outcome",
+            "final label and final owner",
+            "override history and notes",
+            "writeback-compatible fields",
+            "The persistence flow preserves the distinction between the system prediction and the reviewer final outcome",
+            "does not implement retrieval behavior, replay execution, learning-metric aggregation, evaluation-memory-driven workflows, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_reviewed_outcome_persistence_supports_accept_as_is(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="missing_po",
+            predicted_owner="buyer_procurement",
+            accept_as_is=True,
+            final_label="missing_po",
+            final_owner="buyer_procurement",
+            reviewer_notes="Accepted as-is.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+        )
+        decision_memory = persist_reviewed_outcome_to_decision_memory(
+            triage_output={
+                "case_id": "CASE-1000",
+                "exception_type": "missing_po",
+                "recommended_owner": "buyer_procurement",
+                "confidence": "medium",
+            },
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals={
+                "decision_path": "deterministic",
+                "evidence_sources": ["invoice", "po_summary"],
+                "rule_hits": ["missing_po_reference"],
+                "similar_case_refs": [],
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        self.assertEqual(decision_memory["writeback_compatibility"]["predicted_label"], "missing_po")
+        self.assertEqual(decision_memory["final_label"], "missing_po")
+        self.assertFalse(decision_memory["writeback_compatibility"]["override_flag"])
+
+    def test_reviewed_outcome_persistence_supports_label_override(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="insufficient_information",
+            predicted_owner="exception_review_queue",
+            accept_as_is=False,
+            final_label="receiving_mismatch",
+            final_owner="exception_review_queue",
+            reviewer_notes="Receipt mismatch confirmed during review.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+            override_label="receiving_mismatch",
+            override_notes="Changed label after confirming receiving issue.",
+        )
+        decision_memory = persist_reviewed_outcome_to_decision_memory(
+            triage_output={
+                "case_id": "CASE-1001",
+                "exception_type": "insufficient_information",
+                "recommended_owner": "exception_review_queue",
+                "confidence": "low",
+            },
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals={
+                "decision_path": "full_reasoning",
+                "evidence_sources": ["invoice", "receiving_summary"],
+                "rule_hits": ["missing_receipt_reference"],
+                "similar_case_refs": ["CASE-HIST-100"],
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        self.assertEqual(
+            decision_memory["writeback_compatibility"]["predicted_label"], "insufficient_information"
+        )
+        self.assertEqual(decision_memory["final_label"], "receiving_mismatch")
+        self.assertTrue(decision_memory["override_history"][0]["override_flag"])
+
+    def test_reviewed_outcome_persistence_supports_owner_override(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="vendor_mismatch",
+            predicted_owner="exception_review_queue",
+            accept_as_is=False,
+            final_label="vendor_mismatch",
+            final_owner="vendor_master_team",
+            reviewer_notes="Vendor master team should own remediation.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+            override_owner="vendor_master_team",
+            override_notes="Changed owner after vendor profile review.",
+        )
+        decision_memory = persist_reviewed_outcome_to_decision_memory(
+            triage_output={
+                "case_id": "CASE-1002",
+                "exception_type": "vendor_mismatch",
+                "recommended_owner": "exception_review_queue",
+                "confidence": "high",
+            },
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals={
+                "decision_path": "hybrid",
+                "evidence_sources": ["invoice", "vendor_master"],
+                "rule_hits": ["vendor_name_mismatch"],
+                "similar_case_refs": ["CASE-HIST-101"],
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        self.assertEqual(
+            decision_memory["writeback_compatibility"]["predicted_owner"], "exception_review_queue"
+        )
+        self.assertEqual(decision_memory["final_owner"], "vendor_master_team")
+        self.assertEqual(decision_memory["override_history"][0]["override_owner"], "vendor_master_team")
+
+    def test_reviewed_outcome_persistence_missing_writeback_signal_fails_clearly(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="missing_po",
+            predicted_owner="buyer_procurement",
+            accept_as_is=True,
+            final_label="missing_po",
+            final_owner="buyer_procurement",
+            reviewer_notes="Accepted as-is.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=False,
+        )
+        with self.assertRaisesRegex(ValueError, "usage_summary"):
+            persist_reviewed_outcome_to_decision_memory(
+                triage_output={
+                    "case_id": "CASE-1003",
+                    "exception_type": "missing_po",
+                    "recommended_owner": "buyer_procurement",
+                    "confidence": "medium",
+                },
+                reviewer_feedback=reviewer_feedback,
+                writeback_signals={
+                    "decision_path": "deterministic",
+                    "evidence_sources": ["invoice", "po_summary"],
+                    "rule_hits": ["missing_po_reference"],
+                    "similar_case_refs": [],
+                },
+            )
+
+    def test_poc_b_writeback_validation_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0018-poc-b-writeback-validation-and-auditability.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_writeback_validation_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0018-poc-b-writeback-validation-and-auditability.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "complete and structurally valid before it is treated as reusable workflow intelligence",
+            "predicted label",
+            "final label",
+            "predicted owner",
+            "final owner",
+            "override flag",
+            "override notes where applicable",
+            "decision path",
+            "evidence sources",
+            "rule hits",
+            "similar-case refs",
+            "confidence",
+            "usage summary",
+            "if `override_flag` is true, override details must be structurally present",
+            "Validation failures are surfaced in a bounded, auditable way",
+            "reviewer feedback capture",
+            "reviewed-outcome persistence",
+            "decision-memory schema",
+            "does not implement retrieval behavior, replay execution, learning-metric aggregation, evaluation orchestration, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_writeback_validation_accepts_complete_reviewed_case_writeback(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="missing_po",
+            predicted_owner="buyer_procurement",
+            accept_as_is=True,
+            final_label="missing_po",
+            final_owner="buyer_procurement",
+            reviewer_notes="Accepted as-is.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+        )
+        validated = validate_reviewed_case_writeback(
+            triage_output={
+                "exception_type": "missing_po",
+                "recommended_owner": "buyer_procurement",
+                "confidence": "medium",
+            },
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals={
+                "decision_path": "deterministic",
+                "evidence_sources": ["invoice", "po_summary"],
+                "rule_hits": ["missing_po_reference"],
+                "similar_case_refs": [],
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        self.assertEqual(validated["predicted_label"], "missing_po")
+        self.assertEqual(validated["final_owner"], "buyer_procurement")
+
+    def test_writeback_validation_missing_predicted_or_final_fields_fails_clearly(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="missing_po",
+            predicted_owner="buyer_procurement",
+            accept_as_is=True,
+            final_label="missing_po",
+            final_owner="buyer_procurement",
+            reviewer_notes="Accepted as-is.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=False,
+        )
+        with self.assertRaisesRegex(ValueError, "recommended_owner"):
+            validate_reviewed_case_writeback(
+                triage_output={
+                    "exception_type": "missing_po",
+                    "confidence": "medium",
+                },
+                reviewer_feedback=reviewer_feedback,
+                writeback_signals={
+                    "decision_path": "deterministic",
+                    "evidence_sources": ["invoice", "po_summary"],
+                    "rule_hits": ["missing_po_reference"],
+                    "similar_case_refs": [],
+                    "usage_summary": {"token_usage": None},
+                },
+            )
+
+    def test_writeback_validation_missing_required_signal_fails_clearly(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="vendor_mismatch",
+            predicted_owner="exception_review_queue",
+            accept_as_is=True,
+            final_label="vendor_mismatch",
+            final_owner="exception_review_queue",
+            reviewer_notes="Accepted.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=False,
+        )
+        with self.assertRaisesRegex(ValueError, "usage_summary"):
+            validate_reviewed_case_writeback(
+                triage_output={
+                    "exception_type": "vendor_mismatch",
+                    "recommended_owner": "exception_review_queue",
+                    "confidence": "high",
+                },
+                reviewer_feedback=reviewer_feedback,
+                writeback_signals={
+                    "decision_path": "deterministic",
+                    "evidence_sources": ["invoice", "vendor_master"],
+                    "rule_hits": ["vendor_name_mismatch"],
+                    "similar_case_refs": [],
+                },
+            )
+
+    def test_writeback_validation_malformed_override_fails_clearly(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="insufficient_information",
+            predicted_owner="exception_review_queue",
+            accept_as_is=False,
+            final_label="receiving_mismatch",
+            final_owner="exception_review_queue",
+            reviewer_notes="Override required.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+            override_label="receiving_mismatch",
+            override_notes="Override confirmed.",
+        )
+        reviewer_feedback["override_label"] = None
+        reviewer_feedback["override_notes"] = ""
+        with self.assertRaisesRegex(ValueError, "override"):
+            validate_reviewed_case_writeback(
+                triage_output={
+                    "exception_type": "insufficient_information",
+                    "recommended_owner": "exception_review_queue",
+                    "confidence": "low",
+                },
+                reviewer_feedback=reviewer_feedback,
+                writeback_signals={
+                    "decision_path": "full_reasoning",
+                    "evidence_sources": ["invoice", "receiving_summary"],
+                    "rule_hits": ["missing_receipt_reference"],
+                    "similar_case_refs": ["CASE-HIST-200"],
+                    "usage_summary": {"token_usage": None},
+                },
+            )
+
+    def test_writeback_validation_malformed_structured_sections_fail_clearly(self) -> None:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label="vendor_mismatch",
+            predicted_owner="exception_review_queue",
+            accept_as_is=True,
+            final_label="vendor_mismatch",
+            final_owner="exception_review_queue",
+            reviewer_notes="Accepted.",
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=False,
+        )
+        with self.assertRaisesRegex(ValueError, "evidence_sources"):
+            validate_reviewed_case_writeback(
+                triage_output={
+                    "exception_type": "vendor_mismatch",
+                    "recommended_owner": "exception_review_queue",
+                    "confidence": "high",
+                },
+                reviewer_feedback=reviewer_feedback,
+                writeback_signals={
+                    "decision_path": "deterministic",
+                    "evidence_sources": ["invoice", ""],
+                    "rule_hits": ["vendor_name_mismatch"],
+                    "similar_case_refs": [],
+                    "usage_summary": {"token_usage": None},
+                },
+            )
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
