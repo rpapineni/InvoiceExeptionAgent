@@ -1503,6 +1503,38 @@ class PocAScaffoldTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, combined)
 
+    def test_poc_b_reviewer_outcome_contract_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0007-poc-b-reviewer-outcome-contract.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_reviewer_outcome_contract_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0007-poc-b-reviewer-outcome-contract.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "captures the structured result of human review after first-pass triage",
+            "`predicted_label`",
+            "`final_label`",
+            "`predicted_owner`",
+            "`final_owner`",
+            "`override_flag`",
+            "`override_notes`",
+            "an override is present when the reviewer changes the predicted label, predicted owner, or both",
+            "no override does not imply autonomy or auto-resolution",
+            "`reviewer_notes`",
+            "`final_disposition`",
+            "The AP analyst remains the final decision-maker during the pilot",
+            "does not implement persistence yet",
+            "does not implement reusable memory yet",
+            "does not implement retrieval or replay yet",
+            "does not create autonomous downstream action",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
         request = FrontierJudgmentRequest(

@@ -125,6 +125,19 @@ Reference ADR:
 
 - [ADR-0006-poc-b-structured-output-extension.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0006-poc-b-structured-output-extension.md)
 
+## PoC B Reviewer Outcome Contract
+
+PoC B also defines a bounded reviewer outcome contract for recording structured reviewed truth after first-pass triage.
+
+- It distinguishes system prediction from reviewer-finalized outcome with `predicted_label`, `final_label`, `predicted_owner`, and `final_owner`
+- It captures override semantics with `override_flag` and `override_notes`
+- It includes `reviewer_notes` and `final_disposition` for bounded reviewed truth
+- It does not imply that persistence, memory, retrieval, replay, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0007-poc-b-reviewer-outcome-contract.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0007-poc-b-reviewer-outcome-contract.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.
