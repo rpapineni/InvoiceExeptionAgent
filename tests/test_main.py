@@ -61,8 +61,11 @@ from invoice_exception_poc_a.guardrails.policy import (
 from invoice_exception_poc_a.intake.contract import OPTIONAL_TOP_LEVEL_FIELDS, REQUIRED_TOP_LEVEL_FIELDS
 from invoice_exception_poc_a.intake.service import build_case_envelope, load_case, validate_case_payload
 from invoice_exception_poc_a.memory import (
+    KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
     SESSION_MEMORY_REQUIRED_FIELDS,
+    build_knowledge_memory,
     build_session_memory,
+    validate_knowledge_memory,
     validate_session_memory,
 )
 from invoice_exception_poc_a.schema.frontier_parser import parse_frontier_judgment_to_poc_a_output
@@ -1854,6 +1857,90 @@ class PocAScaffoldTests(unittest.TestCase):
         del payload["active_reasoning_state"]
         with self.assertRaisesRegex(ValueError, "active_reasoning_state"):
             validate_session_memory(payload)
+
+    def test_poc_b_knowledge_memory_boundary_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0013-poc-b-knowledge-memory-boundary.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_knowledge_memory_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0013-poc-b-knowledge-memory-boundary.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "retrieval-oriented business context",
+            "`policies`",
+            "`sops`",
+            "`playbooks`",
+            "`routing_guidance`",
+            "`reviewed_case_summaries`",
+            "not current-run session continuity",
+            "not reviewed-outcome truth",
+            "not replay or regression memory",
+            "not generic chat history",
+            "session memory for in-flight run continuity",
+            "decision memory",
+            "evaluation memory",
+            "not raw hidden reasoning",
+            "not raw prompt or provider dumps",
+            "does not implement decision memory, evaluation memory, retrieval behavior, replay, reviewer writeback persistence, long-term learning metrics, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_knowledge_memory_supports_policies_sops_and_playbooks(self) -> None:
+        knowledge_memory = build_knowledge_memory(
+            policies=[{"policy_id": "POL-001", "summary": "Tolerance threshold is 5%."}],
+            sops=[{"sop_id": "SOP-001", "summary": "Escalate unresolved PO issues to procurement."}],
+            playbooks=[{"playbook_id": "PB-001", "summary": "Use receiving mismatch checklist."}],
+            routing_guidance=[{"route_id": "RG-001", "owner": "ap_exception_queue"}],
+            reviewed_case_summaries=[{"summary_id": "RCS-001", "pattern": "Missing PO with inactive vendor"}],
+        )
+        validated = validate_knowledge_memory(knowledge_memory)
+        self.assertEqual(validated["policies"][0]["policy_id"], "POL-001")
+        self.assertEqual(validated["sops"][0]["sop_id"], "SOP-001")
+        self.assertEqual(validated["playbooks"][0]["playbook_id"], "PB-001")
+
+    def test_knowledge_memory_supports_routing_guidance(self) -> None:
+        knowledge_memory = build_knowledge_memory(
+            policies=[{"policy_id": "POL-002", "summary": "Route vendor mismatch to vendor master team."}],
+            sops=[{"sop_id": "SOP-002", "summary": "Confirm vendor identity before escalation."}],
+            playbooks=[{"playbook_id": "PB-002", "summary": "Vendor mismatch review checklist."}],
+            routing_guidance=[
+                {"route_id": "RG-010", "condition": "vendor_mismatch", "recommended_owner": "vendor_master_team"}
+            ],
+            reviewed_case_summaries=[{"summary_id": "RCS-010", "pattern": "Repeated vendor-name mismatch"}],
+        )
+        validated = validate_knowledge_memory(knowledge_memory)
+        self.assertEqual(validated["routing_guidance"][0]["recommended_owner"], "vendor_master_team")
+
+    def test_knowledge_memory_supports_reviewed_case_summaries(self) -> None:
+        knowledge_memory = build_knowledge_memory(
+            policies=[{"policy_id": "POL-003", "summary": "Low-information cases require analyst review."}],
+            sops=[{"sop_id": "SOP-003", "summary": "Capture missing anchors before resolution."}],
+            playbooks=[{"playbook_id": "PB-003", "summary": "Low-data exception handling playbook."}],
+            routing_guidance=[{"route_id": "RG-020", "owner": "exception_review_queue"}],
+            reviewed_case_summaries=[
+                {"summary_id": "RCS-020", "pattern": "Insufficient information with missing receipt reference"}
+            ],
+            bounded_notes=["Retrieval-friendly reviewed summaries only."],
+        )
+        validated = validate_knowledge_memory(knowledge_memory)
+        self.assertEqual(validated["reviewed_case_summaries"][0]["summary_id"], "RCS-020")
+
+    def test_knowledge_memory_missing_required_field_fails_clearly(self) -> None:
+        payload = build_knowledge_memory(
+            policies=[{"policy_id": "POL-004", "summary": "Use PO anchor when present."}],
+            sops=[{"sop_id": "SOP-004", "summary": "Validate PO and receipt references."}],
+            playbooks=[{"playbook_id": "PB-004", "summary": "PO review flow."}],
+            routing_guidance=[{"route_id": "RG-030", "owner": "buyer_procurement"}],
+            reviewed_case_summaries=[{"summary_id": "RCS-030", "pattern": "Missing PO with buyer follow-up"}],
+        )
+        del payload["routing_guidance"]
+        with self.assertRaisesRegex(ValueError, "routing_guidance"):
+            validate_knowledge_memory(payload)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()

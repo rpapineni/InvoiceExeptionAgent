@@ -203,6 +203,19 @@ Reference ADR:
 
 - [ADR-0012-poc-b-session-memory-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0012-poc-b-session-memory-boundary.md)
 
+## PoC B Knowledge Memory Boundary
+
+PoC B also defines a bounded knowledge-memory boundary for retrieval-oriented business context only.
+
+- It supports bounded `policies`, `sops`, `playbooks`, `routing_guidance`, and `reviewed_case_summaries`
+- It is designed for concise reusable knowledge objects rather than current-run state, reviewed-outcome truth, replay artifacts, or generic chat history
+- It is explicitly separate from session memory, decision memory, and evaluation memory
+- It does not imply decision memory, evaluation memory, retrieval behavior, replay, writeback persistence, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0013-poc-b-knowledge-memory-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0013-poc-b-knowledge-memory-boundary.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.
