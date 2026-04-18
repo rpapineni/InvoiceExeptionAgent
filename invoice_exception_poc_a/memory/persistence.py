@@ -46,7 +46,10 @@ def persist_reviewed_outcome_to_decision_memory(
     predicted_owner = triage_output["recommended_owner"]
     final_label = reviewer_feedback["final_label"]
     final_owner = reviewer_feedback["final_owner"]
-    override_flag = reviewer_feedback["override_flag"]
+    override_flag = reviewer_feedback.get(
+        "override_flag",
+        (final_label != reviewer_feedback["predicted_label"]) or (final_owner != reviewer_feedback["predicted_owner"]),
+    )
 
     reviewed_outcome = {
         "case_id": triage_output["case_id"],

@@ -1,0 +1,13 @@
+{
+  "predicted_label": "amount_mismatch",
+  "predicted_owner": "ap_analyst",
+  "accept_as_is": false,
+  "final_label": "vendor_mismatch",
+  "final_owner": "vendor_master_team",
+  "reviewer_notes": "Override for demo to show reusable reviewed-case and vendor-pattern creation.",
+  "ambiguous_or_novel_flag": false,
+  "precedent_usefulness_flag": true,
+  "override_label": "vendor_mismatch",
+  "override_owner": "vendor_master_team",
+  "override_notes": "Vendor master team should own remediation for this reviewed case."
+}

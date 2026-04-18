@@ -1,0 +1,10 @@
+{
+  "predicted_label": "amount_mismatch",
+  "predicted_owner": "ap_analyst",
+  "accept_as_is": true,
+  "final_label": "amount_mismatch",
+  "final_owner": "ap_analyst",
+  "reviewer_notes": "Accepted as-is for PoC B demo.",
+  "ambiguous_or_novel_flag": false,
+  "precedent_usefulness_flag": true
+}

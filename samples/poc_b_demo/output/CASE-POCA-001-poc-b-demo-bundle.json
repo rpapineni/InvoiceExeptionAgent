@@ -1,0 +1,295 @@
+{
+  "demo_bundle_version": "poc_b_demo_v1",
+  "case_source": "samples/sample_case.json",
+  "case_id": "CASE-POCA-001",
+  "triage_output": {
+    "case_id": "CASE-POCA-001",
+    "exception_type": "amount_mismatch",
+    "reason_summary": "Invoice INV-10001 for Placeholder Supplier LLC shows an invoice amount of 1250.00 against PO-450001 approved total of 1200.00, creating a 50.00 overage. Payment terms match NET_30, vendor matches the expected vendor, and receiving shows a partial receipt of 900.00. Upstream review also flagged amount mismatch.",
+    "recommended_owner": "ap_analyst",
+    "priority": "medium",
+    "next_actions": [
+      "Review the invoice amount against the approved PO total and confirm whether the overage is valid or a data issue.",
+      "Check whether the partial receipt affects the allowable billed amount under the PO and contract.",
+      "Verify whether the prior PO line description mismatch has any impact on the billed amount."
+    ],
+    "questions_for_reviewer": [
+      "Is the 1250.00 invoice amount supported by the PO, contract, or any approved change order?",
+      "Does the partial receipt of 900.00 permit billing above the PO approved total?",
+      "Is the prior PO line description mismatch related to the amount difference or a separate issue?"
+    ],
+    "confidence": "high",
+    "run_id": "db050a5e-7b63-4469-ae78-0996be535ff8",
+    "workflow_version": "0.1.0",
+    "prompt_version": "placeholder-prompt-v1",
+    "app_env": "local",
+    "schema_version": "1.0.0",
+    "validation_status": "valid",
+    "validation_errors": [],
+    "repair_attempted": false,
+    "repair_count": 0,
+    "run_metadata": {
+      "case_id": "CASE-POCA-001",
+      "run_id": "db050a5e-7b63-4469-ae78-0996be535ff8",
+      "run_started_at": "2026-04-18T19:01:13.952976+00:00",
+      "workflow_version": "0.1.0",
+      "prompt_version": "placeholder-prompt-v1",
+      "app_env": "local",
+      "triage_engine": "frontier",
+      "retry_count": 0,
+      "latency_ms": 7087.963,
+      "token_usage": null,
+      "compute_usage": null,
+      "validation_status": "valid",
+      "repair_count": 0
+    },
+    "execution_trace": [
+      {
+        "stage": "triage_engine_selection",
+        "status": "completed",
+        "note": "Selected triage engine 'frontier'."
+      },
+      {
+        "stage": "intake",
+        "status": "completed",
+        "note": "Loaded one validated demo case envelope."
+      },
+      {
+        "stage": "normalization",
+        "status": "completed",
+        "note": "Normalized canonical demo case facts."
+      },
+      {
+        "stage": "frontier_prompt_build",
+        "status": "completed",
+        "note": "Built frontier prompt contract 'frontier-triage-v1'."
+      },
+      {
+        "stage": "frontier_adapter_call",
+        "status": "completed",
+        "note": "Frontier adapter 'openai' returned status 'success'."
+      },
+      {
+        "stage": "frontier_output_parse",
+        "status": "completed",
+        "note": "Parsed and normalized bounded frontier judgment fields."
+      },
+      {
+        "stage": "frontier_generation",
+        "status": "completed",
+        "note": "Generated frontier judgment with exception type 'amount_mismatch'."
+      },
+      {
+        "stage": "schema_validation",
+        "status": "completed",
+        "note": "Output matched the formal schema."
+      },
+      {
+        "stage": "output_assembly",
+        "status": "completed",
+        "note": "Assembled bounded output payload."
+      }
+    ]
+  },
+  "reviewer_feedback": {
+    "predicted_label": "amount_mismatch",
+    "predicted_owner": "ap_analyst",
+    "accept_as_is": false,
+    "final_label": "vendor_mismatch",
+    "final_owner": "vendor_master_team",
+    "reviewer_notes": "Override for demo to show reusable reviewed-case and vendor-pattern creation.",
+    "ambiguous_or_novel_flag": false,
+    "precedent_usefulness_flag": true,
+    "override_label": "vendor_mismatch",
+    "override_owner": "vendor_master_team",
+    "override_notes": "Vendor master team should own remediation for this reviewed case."
+  },
+  "validated_writeback": {
+    "predicted_label": "amount_mismatch",
+    "final_label": "vendor_mismatch",
+    "predicted_owner": "ap_analyst",
+    "final_owner": "vendor_master_team",
+    "override_flag": true,
+    "override_notes": "Vendor master team should own remediation for this reviewed case.",
+    "decision_path": "hybrid",
+    "evidence_sources": [
+      "invoice",
+      "po_summary",
+      "vendor_master",
+      "policy_rules"
+    ],
+    "rule_hits": [
+      "amount_mismatch",
+      "vendor_name_mismatch"
+    ],
+    "similar_case_refs": [
+      "CASE-HIST-201"
+    ],
+    "confidence": "high",
+    "usage_summary": {
+      "token_usage": null,
+      "compute_usage": null
+    }
+  },
+  "decision_memory": {
+    "reviewed_outcome": {
+      "case_id": "CASE-POCA-001",
+      "predicted_label": "amount_mismatch",
+      "predicted_owner": "ap_analyst",
+      "final_label": "vendor_mismatch",
+      "final_owner": "vendor_master_team",
+      "accept_as_is": false,
+      "reviewer_notes": "Override for demo to show reusable reviewed-case and vendor-pattern creation.",
+      "ambiguous_or_novel_flag": false,
+      "precedent_usefulness_flag": true,
+      "review_action": "review_completed"
+    },
+    "final_label": "vendor_mismatch",
+    "final_owner": "vendor_master_team",
+    "override_history": [
+      {
+        "override_flag": true,
+        "override_label": "vendor_mismatch",
+        "override_owner": "vendor_master_team",
+        "override_notes": "Vendor master team should own remediation for this reviewed case."
+      }
+    ],
+    "vendor_exception_profile": {
+      "vendor_id": "V-1020",
+      "vendor_name": "Placeholder Supplier LLC",
+      "profile_scope": "demo_runner_vendor_pattern"
+    },
+    "routing_tendencies": [
+      {
+        "owner": "vendor_master_team",
+        "source_case_id": "CASE-POCA-001",
+        "review_action": "review_completed"
+      }
+    ],
+    "confidence_history": [
+      {
+        "confidence": "high",
+        "source": "first_pass_prediction"
+      }
+    ],
+    "remediation_patterns": [
+      {
+        "pattern": "vendor_mismatch",
+        "source_case_id": "CASE-POCA-001",
+        "review_action": "review_completed"
+      }
+    ],
+    "writeback_compatibility": {
+      "predicted_label": "amount_mismatch",
+      "predicted_owner": "ap_analyst",
+      "override_flag": true,
+      "override_notes": "Vendor master team should own remediation for this reviewed case.",
+      "decision_path": "hybrid",
+      "evidence_sources": [
+        "invoice",
+        "po_summary",
+        "vendor_master",
+        "policy_rules"
+      ],
+      "rule_hits": [
+        "amount_mismatch",
+        "vendor_name_mismatch"
+      ],
+      "similar_case_refs": [
+        "CASE-HIST-201"
+      ],
+      "confidence": "high",
+      "usage_summary": {
+        "token_usage": null,
+        "compute_usage": null
+      }
+    },
+    "memory_layer": "decision_memory",
+    "queryable_semantics": "structured_reviewed_outcome_intelligence",
+    "bounded_notes": [
+      "Persisted from structured reviewer feedback."
+    ]
+  },
+  "reviewed_case_summary": {
+    "normalized_case_pattern": "amount_mismatch->vendor_mismatch|path=hybrid",
+    "final_disposition": "vendor_mismatch|owner=vendor_master_team",
+    "override_reason_summary": "Vendor master team should own remediation for this reviewed case.",
+    "routing_precedent": "vendor_master_team|path=hybrid",
+    "vendor_specific_notes": "V-1020|scope=demo_runner_vendor_pattern",
+    "confidence_hint": "confidence=high|evidence_count=4",
+    "summary_kind": "reviewed_case_summary",
+    "retrieval_friendly_semantics": "concise_structured_reuse",
+    "bounded_notes": [
+      "Built from validated decision-memory input."
+    ]
+  },
+  "vendor_exception_profile": {
+    "vendor_ref": "V-1020",
+    "common_exception_types": [
+      "amount_mismatch",
+      "vendor_mismatch"
+    ],
+    "routing_tendency": "vendor_master_team|path=hybrid",
+    "override_tendency": "override_common",
+    "terms_mismatch_tendency": "no_terms_mismatch_pattern",
+    "confidence_trend": "high",
+    "remediation_tendency": "vendor_mismatch",
+    "profile_kind": "vendor_exception_profile",
+    "reusable_pattern_semantics": "bounded_vendor_pattern_intelligence",
+    "bounded_notes": [
+      "Built from validated reviewed-outcome intelligence."
+    ]
+  },
+  "telemetry": {
+    "selected_path": "hybrid",
+    "path_transitions": [
+      "hybrid"
+    ],
+    "escalation_reason": null,
+    "retry_count": 0,
+    "latency_ms": 7087.963,
+    "human_review_required": true,
+    "usage_summary": {
+      "token_usage": null,
+      "compute_usage": null
+    },
+    "engine_mode": "frontier",
+    "path_confidence_source": "high",
+    "decision_path_version": "poc_b_demo_v1",
+    "bounded_notes": [
+      "Demo telemetry for the PoC B reviewed-case value loop."
+    ]
+  },
+  "bounded_trace": [
+    {
+      "stage": "triage_start",
+      "status": "completed",
+      "note": "Started bounded PoC B handling flow."
+    },
+    {
+      "stage": "decision_path_selection",
+      "status": "completed",
+      "note": "Selected decision path 'hybrid'."
+    },
+    {
+      "stage": "decision_path_telemetry_capture",
+      "status": "completed",
+      "note": "Captured bounded decision-path telemetry."
+    },
+    {
+      "stage": "reviewer_outcome_pending",
+      "status": "completed",
+      "note": "Human review remains required before final reviewed truth is recorded."
+    },
+    {
+      "stage": "memory_writeback_pending",
+      "status": "completed",
+      "note": "Structured writeback is pending; persistence is not implemented in this story."
+    }
+  ],
+  "reuse_preview": {
+    "decision_memory_created": true,
+    "reviewed_case_summary_created": true,
+    "vendor_exception_profile_created": true
+  }
+}

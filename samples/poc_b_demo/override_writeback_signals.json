@@ -1,0 +1,10 @@
+{
+  "decision_path": "hybrid",
+  "evidence_sources": ["invoice", "po_summary", "vendor_master", "policy_rules"],
+  "rule_hits": ["amount_mismatch", "vendor_name_mismatch"],
+  "similar_case_refs": ["CASE-HIST-201"],
+  "usage_summary": {
+    "token_usage": null,
+    "compute_usage": null
+  }
+}

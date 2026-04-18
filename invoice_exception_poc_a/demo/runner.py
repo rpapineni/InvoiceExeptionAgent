@@ -76,6 +76,7 @@ def run_poc_b_demo(
         retry_count=0,
         execution_trace=triage_result["execution_trace"],
     )
+    _validate_demo_feedback_alignment(triage_output, reviewer_feedback)
 
     validated_writeback = validate_reviewed_case_writeback(
         triage_output={
@@ -225,6 +226,17 @@ def _vendor_profile_applicable(normalized_case: dict) -> bool:
 
 def _infer_selected_path(triage_engine: str) -> str:
     return "full_reasoning" if triage_engine == "frontier" else "deterministic"
+
+
+def _validate_demo_feedback_alignment(triage_output: dict, reviewer_feedback: dict) -> None:
+    if reviewer_feedback["predicted_label"] != triage_output["exception_type"]:
+        raise ValueError(
+            "Reviewer feedback predicted_label must match the first-pass triage exception_type for the demo runner."
+        )
+    if reviewer_feedback["predicted_owner"] != triage_output["recommended_owner"]:
+        raise ValueError(
+            "Reviewer feedback predicted_owner must match the first-pass triage recommended_owner for the demo runner."
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,10 @@
+{
+  "decision_path": "full_reasoning",
+  "evidence_sources": ["invoice", "po_summary", "vendor_master", "policy_rules"],
+  "rule_hits": ["amount_mismatch"],
+  "similar_case_refs": [],
+  "usage_summary": {
+    "token_usage": null,
+    "compute_usage": null
+  }
+}

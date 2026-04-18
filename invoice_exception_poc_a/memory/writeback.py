@@ -43,7 +43,10 @@ def validate_reviewed_case_writeback(
     predicted_owner = triage_output["recommended_owner"]
     final_label = reviewer_feedback["final_label"]
     final_owner = reviewer_feedback["final_owner"]
-    override_flag = reviewer_feedback["override_flag"]
+    override_flag = reviewer_feedback.get(
+        "override_flag",
+        (final_label != reviewer_feedback["predicted_label"]) or (final_owner != reviewer_feedback["predicted_owner"]),
+    )
 
     writeback_payload = {
         "predicted_label": predicted_label,
