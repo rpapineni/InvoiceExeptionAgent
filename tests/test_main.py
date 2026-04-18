@@ -2670,6 +2670,34 @@ class PocAScaffoldTests(unittest.TestCase):
                 },
             )
 
+    def test_writeback_validation_derives_override_flag_when_not_present(self) -> None:
+        reviewer_feedback = {
+            "predicted_label": "missing_po",
+            "predicted_owner": "buyer_procurement",
+            "accept_as_is": True,
+            "final_label": "missing_po",
+            "final_owner": "buyer_procurement",
+            "reviewer_notes": "Accepted as-is.",
+            "ambiguous_or_novel_flag": False,
+            "precedent_usefulness_flag": True,
+        }
+        validated = validate_reviewed_case_writeback(
+            triage_output={
+                "exception_type": "missing_po",
+                "recommended_owner": "buyer_procurement",
+                "confidence": "medium",
+            },
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals={
+                "decision_path": "deterministic",
+                "evidence_sources": ["invoice", "po_summary"],
+                "rule_hits": ["missing_po_reference"],
+                "similar_case_refs": [],
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        self.assertFalse(validated["override_flag"])
+
     def test_poc_b_reviewed_case_summary_document_exists(self) -> None:
         adr_path = ROOT / "docs" / "adr" / "ADR-0019-poc-b-reviewed-case-summary-model.md"
         self.assertTrue(adr_path.is_file())
