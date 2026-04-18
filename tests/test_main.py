@@ -60,6 +60,11 @@ from invoice_exception_poc_a.guardrails.policy import (
 )
 from invoice_exception_poc_a.intake.contract import OPTIONAL_TOP_LEVEL_FIELDS, REQUIRED_TOP_LEVEL_FIELDS
 from invoice_exception_poc_a.intake.service import build_case_envelope, load_case, validate_case_payload
+from invoice_exception_poc_a.memory import (
+    SESSION_MEMORY_REQUIRED_FIELDS,
+    build_session_memory,
+    validate_session_memory,
+)
 from invoice_exception_poc_a.schema.frontier_parser import parse_frontier_judgment_to_poc_a_output
 from invoice_exception_poc_a.schema.frontier_parser import normalize_frontier_judgment_for_validation
 from invoice_exception_poc_a.schema.model import (
@@ -1780,6 +1785,75 @@ class PocAScaffoldTests(unittest.TestCase):
         )
         self.assertEqual(trace[-1]["status"], "failed")
         self.assertIn("telemetry capture failed", trace[-1]["note"].lower())
+
+    def test_poc_b_session_memory_boundary_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0012-poc-b-session-memory-boundary.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_session_memory_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0012-poc-b-session-memory-boundary.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "current in-flight run only",
+            "`case_context`",
+            "`tool_outputs`",
+            "`active_reasoning_state`",
+            "`reviewer_session_state`",
+            "ephemeral",
+            "cleanup or reset at the end of the run or review session",
+            "knowledge memory",
+            "decision memory",
+            "evaluation memory",
+            "not generic conversation history",
+            "does not implement knowledge memory, decision memory, evaluation memory, retrieval, replay, reviewer writeback persistence, long-term storage, or autonomous workflow behavior",
+            "The AP analyst remains the final decision-maker during the pilot",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_session_memory_supports_in_flight_case_context_and_tool_outputs(self) -> None:
+        session_memory = build_session_memory(
+            case_context={"case_id": "CASE-123", "coverage_bucket": "mixed_signal"},
+            tool_outputs=[
+                {"tool_name": "normalization", "status": "completed"},
+                {"tool_name": "policy_lookup", "status": "completed"},
+            ],
+            active_reasoning_state={"selected_path": "deterministic", "next_step": "review_handoff"},
+            reviewer_session_state={"review_required": True, "handoff_status": "pending"},
+            bounded_notes=["Current-run continuity only."],
+        )
+        validated = validate_session_memory(session_memory)
+        self.assertEqual(validated["case_context"]["case_id"], "CASE-123")
+        self.assertEqual(len(validated["tool_outputs"]), 2)
+
+    def test_session_memory_supports_bounded_reviewer_session_continuity(self) -> None:
+        session_memory = build_session_memory(
+            case_context={"case_id": "CASE-456", "vendor_name": "Northwind"},
+            tool_outputs=[],
+            active_reasoning_state={"selected_path": "full_reasoning", "ambiguity_state": "active"},
+            reviewer_session_state={
+                "review_required": True,
+                "review_session_ref": "review-session-001",
+                "pending_question_count": 2,
+            },
+        )
+        validated = validate_session_memory(session_memory)
+        self.assertTrue(validated["reviewer_session_state"]["review_required"])
+
+    def test_session_memory_missing_required_field_fails_clearly(self) -> None:
+        payload = build_session_memory(
+            case_context={"case_id": "CASE-789"},
+            tool_outputs=[],
+            active_reasoning_state={"selected_path": "hybrid"},
+            reviewer_session_state={"review_required": True},
+        )
+        del payload["active_reasoning_state"]
+        with self.assertRaisesRegex(ValueError, "active_reasoning_state"):
+            validate_session_memory(payload)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()

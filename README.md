@@ -190,6 +190,19 @@ Reference ADR:
 
 - [ADR-0011-poc-b-bounded-trace-stages.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0011-poc-b-bounded-trace-stages.md)
 
+## PoC B Session Memory Boundary
+
+PoC B also defines a bounded session-memory boundary for current-run continuity only.
+
+- It supports bounded `case_context`, `tool_outputs`, `active_reasoning_state`, and `reviewer_session_state`
+- It is current-run-only, ephemeral, and subject to cleanup or reset at the end of the run or review session
+- It is explicitly separate from knowledge memory, decision memory, and evaluation memory
+- It does not imply retrieval, replay, long-term memory storage, writeback persistence, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0012-poc-b-session-memory-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0012-poc-b-session-memory-boundary.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.
