@@ -1,5 +1,12 @@
 """Bounded session-memory structures for PoC B in-flight continuity."""
 
+from invoice_exception_poc_a.memory.decision import (
+    DECISION_MEMORY_REQUIRED_FIELDS,
+    MINIMUM_WRITEBACK_COMPATIBILITY_FIELDS,
+    PocBDecisionMemory,
+    build_decision_memory,
+    validate_decision_memory,
+)
 from invoice_exception_poc_a.memory.knowledge import (
     KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
     PocBKnowledgeMemory,
@@ -14,12 +21,17 @@ from invoice_exception_poc_a.memory.model import (
 )
 
 __all__ = [
+    "DECISION_MEMORY_REQUIRED_FIELDS",
     "KNOWLEDGE_MEMORY_REQUIRED_FIELDS",
+    "MINIMUM_WRITEBACK_COMPATIBILITY_FIELDS",
+    "PocBDecisionMemory",
     "PocBKnowledgeMemory",
     "PocBSessionMemory",
     "SESSION_MEMORY_REQUIRED_FIELDS",
+    "build_decision_memory",
     "build_knowledge_memory",
     "build_session_memory",
+    "validate_decision_memory",
     "validate_knowledge_memory",
     "validate_session_memory",
 ]

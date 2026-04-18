@@ -216,6 +216,19 @@ Reference ADR:
 
 - [ADR-0013-poc-b-knowledge-memory-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0013-poc-b-knowledge-memory-boundary.md)
 
+## PoC B Decision Memory Boundary
+
+PoC B also defines a bounded decision-memory boundary for reviewed-outcome truth and reusable workflow intelligence.
+
+- It supports bounded `reviewed_outcome`, `final_label`, `final_owner`, `override_history`, `vendor_exception_profile`, `routing_tendencies`, `confidence_history`, and `remediation_patterns`
+- It explicitly accommodates the minimum reviewed-case writeback signals through structured writeback-compatibility fields
+- It is intended for structured and queryable reusable workflow intelligence rather than session continuity, knowledge retrieval context, replay artifacts, or generic chat history
+- It does not imply evaluation memory, retrieval behavior, replay, full reviewer writeback orchestration, learning metrics, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0014-poc-b-decision-memory-boundary.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0014-poc-b-decision-memory-boundary.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

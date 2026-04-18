@@ -61,10 +61,14 @@ from invoice_exception_poc_a.guardrails.policy import (
 from invoice_exception_poc_a.intake.contract import OPTIONAL_TOP_LEVEL_FIELDS, REQUIRED_TOP_LEVEL_FIELDS
 from invoice_exception_poc_a.intake.service import build_case_envelope, load_case, validate_case_payload
 from invoice_exception_poc_a.memory import (
+    DECISION_MEMORY_REQUIRED_FIELDS,
     KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
+    MINIMUM_WRITEBACK_COMPATIBILITY_FIELDS,
     SESSION_MEMORY_REQUIRED_FIELDS,
+    build_decision_memory,
     build_knowledge_memory,
     build_session_memory,
+    validate_decision_memory,
     validate_knowledge_memory,
     validate_session_memory,
 )
@@ -1941,6 +1945,158 @@ class PocAScaffoldTests(unittest.TestCase):
         del payload["routing_guidance"]
         with self.assertRaisesRegex(ValueError, "routing_guidance"):
             validate_knowledge_memory(payload)
+
+    def test_poc_b_decision_memory_boundary_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0014-poc-b-decision-memory-boundary.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_decision_memory_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0014-poc-b-decision-memory-boundary.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "reviewed-outcome truth and reusable workflow intelligence",
+            "structured and queryable reusable workflow intelligence",
+            "`reviewed_outcome`",
+            "`final_label`",
+            "`final_owner`",
+            "`override_history`",
+            "`vendor_exception_profile`",
+            "`routing_tendencies`",
+            "`confidence_history`",
+            "`remediation_patterns`",
+            "predicted versus final label",
+            "predicted versus final owner",
+            "override flag and notes",
+            "decision path and evidence",
+            "rule hits and similar-case references",
+            "confidence and usage summary",
+            "session memory for in-flight run continuity",
+            "knowledge memory for retrieval-oriented business context",
+            "evaluation memory",
+            "not generic chat history",
+            "does not implement evaluation memory, retrieval behavior, replay, full reviewer writeback orchestration, learning metrics, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_decision_memory_supports_final_reviewed_outcome(self) -> None:
+        decision_memory = build_decision_memory(
+            reviewed_outcome={"case_id": "CASE-900", "final_disposition": "investigate_missing_po"},
+            final_label="missing_po",
+            final_owner="buyer_procurement",
+            override_history=[{"override_flag": False, "override_notes": ""}],
+            vendor_exception_profile={"vendor_id": "V-001", "pattern": "PO frequently omitted"},
+            routing_tendencies=[{"owner": "buyer_procurement", "count": 3}],
+            confidence_history=[{"confidence": "medium", "source": "reviewed_outcome"}],
+            remediation_patterns=[{"pattern": "request_po_confirmation", "count": 2}],
+            writeback_compatibility={
+                "predicted_label": "missing_po",
+                "predicted_owner": "buyer_procurement",
+                "override_flag": False,
+                "override_notes": "",
+                "decision_path": "deterministic",
+                "evidence_sources": ["invoice", "po_summary"],
+                "rule_hits": ["missing_po_reference"],
+                "similar_case_refs": [],
+                "confidence": "medium",
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        validated = validate_decision_memory(decision_memory)
+        self.assertEqual(validated["final_label"], "missing_po")
+        self.assertEqual(validated["final_owner"], "buyer_procurement")
+
+    def test_decision_memory_supports_override_history(self) -> None:
+        decision_memory = build_decision_memory(
+            reviewed_outcome={"case_id": "CASE-901", "final_disposition": "reroute_to_vendor_team"},
+            final_label="vendor_mismatch",
+            final_owner="vendor_master_team",
+            override_history=[
+                {"override_flag": True, "override_notes": "Analyst changed owner after vendor review."}
+            ],
+            vendor_exception_profile={"vendor_id": "V-002", "pattern": "Frequent naming mismatches"},
+            routing_tendencies=[{"owner": "vendor_master_team", "count": 4}],
+            confidence_history=[{"confidence": "high", "source": "reviewed_outcome"}],
+            remediation_patterns=[{"pattern": "vendor_master_correction", "count": 3}],
+            writeback_compatibility={
+                "predicted_label": "vendor_mismatch",
+                "predicted_owner": "exception_review_queue",
+                "override_flag": True,
+                "override_notes": "Analyst changed owner after vendor review.",
+                "decision_path": "full_reasoning",
+                "evidence_sources": ["invoice", "vendor_master"],
+                "rule_hits": ["vendor_name_mismatch"],
+                "similar_case_refs": ["CASE-HIST-010"],
+                "confidence": "high",
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        validated = validate_decision_memory(decision_memory)
+        self.assertTrue(validated["override_history"][0]["override_flag"])
+
+    def test_decision_memory_supports_vendor_profiles_and_patterns(self) -> None:
+        decision_memory = build_decision_memory(
+            reviewed_outcome={"case_id": "CASE-902", "final_disposition": "review_receiving_gap"},
+            final_label="receiving_mismatch",
+            final_owner="receiving_ops",
+            override_history=[{"override_flag": False, "override_notes": ""}],
+            vendor_exception_profile={"vendor_id": "V-003", "pattern": "Partial receipt discrepancies"},
+            routing_tendencies=[{"owner": "receiving_ops", "count": 5}],
+            confidence_history=[
+                {"confidence": "low", "source": "prediction"},
+                {"confidence": "medium", "source": "reviewed_outcome"},
+            ],
+            remediation_patterns=[
+                {"pattern": "receipt_reconciliation", "count": 4},
+                {"pattern": "receiver_follow_up", "count": 2},
+            ],
+            writeback_compatibility={
+                "predicted_label": "receiving_mismatch",
+                "predicted_owner": "receiving_ops",
+                "override_flag": False,
+                "override_notes": "",
+                "decision_path": "hybrid",
+                "evidence_sources": ["invoice", "receiving_summary"],
+                "rule_hits": ["receipt_amount_gap"],
+                "similar_case_refs": ["CASE-HIST-011"],
+                "confidence": "medium",
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        validated = validate_decision_memory(decision_memory)
+        self.assertEqual(validated["vendor_exception_profile"]["vendor_id"], "V-003")
+        self.assertEqual(len(validated["remediation_patterns"]), 2)
+
+    def test_decision_memory_missing_required_field_fails_clearly(self) -> None:
+        payload = build_decision_memory(
+            reviewed_outcome={"case_id": "CASE-903", "final_disposition": "manual_review"},
+            final_label="insufficient_information",
+            final_owner="exception_review_queue",
+            override_history=[{"override_flag": False, "override_notes": ""}],
+            vendor_exception_profile={"vendor_id": "V-004", "pattern": "Low-data submissions"},
+            routing_tendencies=[{"owner": "exception_review_queue", "count": 6}],
+            confidence_history=[{"confidence": "low", "source": "reviewed_outcome"}],
+            remediation_patterns=[{"pattern": "request_missing_docs", "count": 6}],
+            writeback_compatibility={
+                "predicted_label": "insufficient_information",
+                "predicted_owner": "exception_review_queue",
+                "override_flag": False,
+                "override_notes": "",
+                "decision_path": "full_reasoning",
+                "evidence_sources": ["invoice"],
+                "rule_hits": ["missing_receipt_reference"],
+                "similar_case_refs": [],
+                "confidence": "low",
+                "usage_summary": {"token_usage": None},
+            },
+        )
+        del payload["writeback_compatibility"]
+        with self.assertRaisesRegex(ValueError, "writeback_compatibility"):
+            validate_decision_memory(payload)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
