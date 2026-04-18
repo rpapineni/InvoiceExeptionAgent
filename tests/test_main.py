@@ -39,6 +39,11 @@ from invoice_exception_poc_a.evaluation.acceptance_report import (
     POC_A_ACCEPTANCE_CRITERIA,
     create_acceptance_report_template,
 )
+from invoice_exception_poc_a.demo import (
+    CURATED_POC_B_DEMO_CASES,
+    run_poc_b_demo,
+    write_demo_artifact_bundle,
+)
 from invoice_exception_poc_a.evaluation.dataset import load_dataset_case, load_dataset_manifest
 from invoice_exception_poc_a.evaluation.comparison_runner import (
     build_comparison_record,
@@ -3185,6 +3190,135 @@ class PocAScaffoldTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "over-authoritative"):
             validate_retrieved_pattern_influence_policy(policy)
 
+    def test_poc_b_demo_runner_uses_curated_case_registry(self) -> None:
+        self.assertIn("sample_case", CURATED_POC_B_DEMO_CASES)
+        self.assertTrue(CURATED_POC_B_DEMO_CASES["sample_case"].is_file())
+
+    def test_poc_b_demo_runner_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        required_markers = [
+            "PoC B End-To-End Demo Runner",
+            "first-pass triage",
+            "structured reviewer feedback",
+            "writeback validation",
+            "decision-memory persistence",
+            "reviewed-case summary creation",
+            "optional vendor exception profile creation",
+            "telemetry and bounded trace capture",
+            "How to run:",
+            "sample_case",
+            "mixed_signal_ambiguous",
+            "What PoC B is proving here:",
+            "Still out of scope:",
+            "live retrieval execution",
+            "replay execution",
+            "learning-metric aggregation",
+            "autonomous routing or payment action",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, readme_text)
+
+    def test_poc_b_demo_runner_accept_as_is_case_succeeds(self) -> None:
+        reviewer_feedback = self._build_demo_feedback_for_case(self._valid_minimal_payload())
+        bundle = run_poc_b_demo(
+            case_input=self._valid_minimal_payload(),
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals=self._build_demo_writeback_signals(),
+            settings=get_settings(),
+        )
+
+        self.assertEqual(bundle["case_id"], "CASE-TEST-001")
+        self.assertEqual(bundle["reviewer_feedback"]["final_label"], bundle["triage_output"]["exception_type"])
+        self.assertEqual(bundle["reviewer_feedback"]["final_owner"], bundle["triage_output"]["recommended_owner"])
+        self.assertIn("decision_memory", bundle)
+        self.assertIn("reviewed_case_summary", bundle)
+        self.assertIn("telemetry", bundle)
+        self.assertIn("bounded_trace", bundle)
+
+    def test_poc_b_demo_runner_override_case_succeeds(self) -> None:
+        reviewer_feedback = self._build_demo_feedback_for_case(
+            self._valid_minimal_payload(),
+            accept_as_is=False,
+            final_label="terms_mismatch",
+            final_owner="exception_review_queue",
+            reviewer_notes="Override for demo.",
+            override_label="terms_mismatch",
+            override_owner="exception_review_queue",
+            override_notes="Changed label and owner for demo.",
+        )
+        bundle = run_poc_b_demo(
+            case_input=self._valid_minimal_payload(),
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals=self._build_demo_writeback_signals(
+                decision_path="full_reasoning",
+                evidence_sources=["invoice", "po_summary", "policy_rules"],
+                rule_hits=["terms_mismatch_rule"],
+            ),
+            settings=get_settings(),
+        )
+
+        self.assertEqual(bundle["decision_memory"]["final_label"], "terms_mismatch")
+        self.assertTrue(bundle["decision_memory"]["override_history"][0]["override_flag"])
+        self.assertEqual(bundle["telemetry"]["selected_path"], "full_reasoning")
+
+    def test_poc_b_demo_runner_produces_reviewed_case_summary_and_vendor_profile(self) -> None:
+        reviewer_feedback = self._build_demo_feedback_for_case(
+            "sample_case",
+            accept_as_is=False,
+            final_label="vendor_mismatch",
+            final_owner="vendor_master_team",
+            reviewer_notes="Vendor-specific override for demo.",
+            override_label="vendor_mismatch",
+            override_owner="vendor_master_team",
+            override_notes="Vendor pattern indicates vendor master team review.",
+        )
+        bundle = run_poc_b_demo(
+            case_input="sample_case",
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals=self._build_demo_writeback_signals(
+                decision_path="hybrid",
+                evidence_sources=["invoice", "vendor_master"],
+                rule_hits=["vendor_name_mismatch"],
+                similar_case_refs=["CASE-HIST-201"],
+            ),
+            settings=get_settings(),
+        )
+
+        self.assertIn("normalized_case_pattern", bundle["reviewed_case_summary"])
+        self.assertIsNotNone(bundle["vendor_exception_profile"])
+        self.assertIn("vendor_ref", bundle["vendor_exception_profile"])
+        self.assertTrue(bundle["reuse_preview"]["decision_memory_created"])
+        self.assertTrue(bundle["reuse_preview"]["reviewed_case_summary_created"])
+
+    def test_poc_b_demo_runner_writes_artifact_bundle(self) -> None:
+        bundle = run_poc_b_demo(
+            case_input=self._valid_minimal_payload(),
+            reviewer_feedback=self._build_demo_feedback_for_case(self._valid_minimal_payload()),
+            writeback_signals=self._build_demo_writeback_signals(),
+            settings=get_settings(),
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundle_path = write_demo_artifact_bundle(bundle, temp_dir)
+            self.assertTrue(bundle_path.is_file())
+            written = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertEqual(written["case_id"], bundle["case_id"])
+            self.assertIn("decision_memory", written)
+
+    def test_poc_b_demo_runner_missing_required_inputs_fail_clearly(self) -> None:
+        with self.assertRaisesRegex(ValueError, "usage_summary"):
+            run_poc_b_demo(
+                case_input=self._valid_minimal_payload(),
+                reviewer_feedback=self._build_demo_feedback_for_case(self._valid_minimal_payload()),
+                writeback_signals={
+                    "decision_path": "deterministic",
+                    "evidence_sources": ["invoice", "po_summary"],
+                    "rule_hits": ["missing_po_reference"],
+                    "similar_case_refs": [],
+                },
+                settings=get_settings(),
+            )
+
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
         request = FrontierJudgmentRequest(
@@ -4084,6 +4218,90 @@ class PocAScaffoldTests(unittest.TestCase):
                 "usage_summary": {"token_usage": None},
             },
             vendor_exception_profile=vendor_exception_profile,
+        )
+
+    def _build_demo_feedback(
+        self,
+        *,
+        predicted_label: str = "missing_po",
+        predicted_owner: str = "buyer_procurement",
+        accept_as_is: bool = True,
+        final_label: str = "missing_po",
+        final_owner: str = "buyer_procurement",
+        reviewer_notes: str = "Accepted as-is for demo.",
+        override_label: str | None = None,
+        override_owner: str | None = None,
+        override_notes: str = "",
+    ) -> dict:
+        return build_reviewer_feedback(
+            predicted_label=predicted_label,
+            predicted_owner=predicted_owner,
+            accept_as_is=accept_as_is,
+            final_label=final_label,
+            final_owner=final_owner,
+            reviewer_notes=reviewer_notes,
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+            override_label=override_label,
+            override_owner=override_owner,
+            override_notes=override_notes,
+        )
+
+    def _build_demo_writeback_signals(
+        self,
+        *,
+        decision_path: str = "deterministic",
+        evidence_sources: list[str] | None = None,
+        rule_hits: list[str] | None = None,
+        similar_case_refs: list[str] | None = None,
+    ) -> dict:
+        return {
+            "decision_path": decision_path,
+            "evidence_sources": evidence_sources or ["invoice", "po_summary"],
+            "rule_hits": rule_hits or ["missing_po_reference"],
+            "similar_case_refs": similar_case_refs or [],
+            "usage_summary": {"token_usage": None, "compute_usage": None},
+        }
+
+    def _build_demo_feedback_for_case(
+        self,
+        case_input: str | Path | dict,
+        *,
+        accept_as_is: bool = True,
+        final_label: str | None = None,
+        final_owner: str | None = None,
+        reviewer_notes: str = "Accepted as-is for demo.",
+        override_label: str | None = None,
+        override_owner: str | None = None,
+        override_notes: str = "",
+    ) -> dict:
+        settings = get_settings()
+        if isinstance(case_input, dict):
+            validated_case = validate_case_payload(case_input)
+        elif isinstance(case_input, Path):
+            validated_case = load_case(case_input)
+        elif case_input in CURATED_POC_B_DEMO_CASES:
+            validated_case = load_case(CURATED_POC_B_DEMO_CASES[case_input])
+        else:
+            validated_case = load_case(Path(case_input))
+
+        normalized_case = normalize_case(build_case_envelope(validated_case, settings))
+        triage_result = run_triage(normalized_case, settings, [])
+        predicted_label = triage_result["exception_type"]
+        predicted_owner = triage_result["recommended_owner"]
+        final_label = final_label or predicted_label
+        final_owner = final_owner or predicted_owner
+
+        return self._build_demo_feedback(
+            predicted_label=predicted_label,
+            predicted_owner=predicted_owner,
+            accept_as_is=accept_as_is,
+            final_label=final_label,
+            final_owner=final_owner,
+            reviewer_notes=reviewer_notes,
+            override_label=override_label,
+            override_owner=override_owner,
+            override_notes=override_notes,
         )
 
     def _valid_minimal_payload(self) -> dict:

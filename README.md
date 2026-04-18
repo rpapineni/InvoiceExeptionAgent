@@ -333,6 +333,59 @@ Reference ADR:
 
 - [ADR-0022-poc-b-retrieved-pattern-influence-policy.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0022-poc-b-retrieved-pattern-influence-policy.md)
 
+## PoC B End-To-End Demo Runner
+
+PoC B also provides a bounded end-to-end demo runner that makes the learning loop visible in one inspectable flow:
+
+- first-pass triage
+- structured reviewer feedback
+- writeback validation
+- decision-memory persistence
+- reviewed-case summary creation
+- optional vendor exception profile creation
+- telemetry and bounded trace capture
+- demo artifact bundle generation
+
+How to run:
+
+```bash
+python3 -m invoice_exception_poc_a.demo.runner \
+  --input sample_case \
+  --reviewer-feedback /absolute/path/to/reviewer_feedback.json \
+  --writeback-signals /absolute/path/to/writeback_signals.json \
+  --output-dir /absolute/path/to/demo-output
+```
+
+Curated demo case names:
+
+- `sample_case`
+- `mixed_signal_ambiguous`
+
+Expected outputs:
+
+- first-pass triage output
+- reviewer feedback payload
+- validated writeback payload
+- decision-memory record
+- reviewed-case summary
+- vendor exception profile when vendor-compatible input exists
+- telemetry output
+- bounded trace output
+- a JSON demo artifact bundle in the chosen output directory
+
+What PoC B is proving here:
+
+- reviewed human feedback becomes reusable workflow intelligence
+- reusable reviewed-case artifacts are created in one bounded flow
+- observability remains concise and demo-friendly
+
+Still out of scope:
+
+- live retrieval execution
+- replay execution
+- learning-metric aggregation
+- autonomous routing or payment action
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.
