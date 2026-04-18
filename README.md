@@ -320,6 +320,19 @@ Reference ADR:
 
 - [ADR-0021-poc-b-vendor-exception-profile-model.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0021-poc-b-vendor-exception-profile-model.md)
 
+## PoC B Retrieved-Pattern Influence Policy
+
+PoC B also defines a bounded retrieved-pattern influence policy for how reusable artifacts may shape future recommendation-related output.
+
+- It supports bounded influence on recommendation, explanation, confidence, next actions, and reviewer questions
+- It remains compatible with reviewed-case summaries, policy snippets, vendor patterns, and routing precedents
+- It preserves traceability and advisory-only posture rather than allowing retrieved artifacts to become opaque authority
+- It does not imply live retrieval, ranking, replay, learning metrics, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0022-poc-b-retrieved-pattern-influence-policy.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0022-poc-b-retrieved-pattern-influence-policy.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

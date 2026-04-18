@@ -69,12 +69,14 @@ from invoice_exception_poc_a.memory import (
     REVIEWED_CASE_WRITEBACK_REQUIRED_FIELDS,
     REVIEWED_CASE_SUMMARY_REQUIRED_FIELDS,
     REVIEWED_OUTCOME_PERSISTENCE_REQUIRED_SIGNALS,
+    RETRIEVED_PATTERN_INFLUENCE_REQUIRED_FIELDS,
     RETRIEVAL_CONTRACT_REQUIRED_FIELDS,
     SESSION_MEMORY_REQUIRED_FIELDS,
     VENDOR_EXCEPTION_PROFILE_REQUIRED_FIELDS,
     build_decision_memory,
     build_evaluation_memory,
     build_knowledge_memory,
+    build_retrieved_pattern_influence_policy,
     build_reviewed_case_summary,
     build_similar_case_retrieval_artifact,
     build_session_memory,
@@ -83,6 +85,7 @@ from invoice_exception_poc_a.memory import (
     validate_decision_memory,
     validate_evaluation_memory,
     validate_knowledge_memory,
+    validate_retrieved_pattern_influence_policy,
     validate_reviewed_case_summary,
     validate_similar_case_retrieval_artifact,
     validate_reviewed_case_writeback,
@@ -3023,6 +3026,164 @@ class PocAScaffoldTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "disallowed"):
             validate_vendor_exception_profile(profile)
+
+    def test_poc_b_retrieved_pattern_influence_policy_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0022-poc-b-retrieved-pattern-influence-policy.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_retrieved_pattern_influence_policy_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0022-poc-b-retrieved-pattern-influence-policy.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "how retrieved patterns may influence future outputs in bounded ways",
+            "recommendation_influence",
+            "explanation_influence",
+            "confidence_influence",
+            "next_actions_influence",
+            "reviewer_questions_influence",
+            "reviewed-case summaries",
+            "policy snippets",
+            "vendor patterns",
+            "routing precedents",
+            "do not override reviewed truth",
+            "do not bypass human review",
+            "do not silently auto-resolve cases",
+            "do not authorize routing or payment action on their own",
+            "what type of artifact influenced the output",
+            "The AP analyst remains the final decision-maker",
+            "does not implement live retrieval execution, ranking or scoring, replay execution, learning-metric aggregation, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_influence_policy_supports_reviewed_case_summary_artifact(self) -> None:
+        summary = build_reviewed_case_summary(decision_memory=self._build_decision_memory_for_summary())
+        retrieval_artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="similar_case_reuse",
+            source_type="reviewed_case_summary",
+            source_ref="CASE-SUMMARY-001",
+            source_summary=summary["normalized_case_pattern"],
+            relevance_hint=summary["confidence_hint"],
+            source_payload=summary,
+        )
+        policy = build_retrieved_pattern_influence_policy(
+            retrieval_artifact=retrieval_artifact,
+            recommendation_influence="suggest use of prior reviewed-case pattern as advisory context",
+            explanation_influence="cite the reviewed-case summary as bounded precedent context",
+            confidence_influence="slightly adjust confidence explanation when pattern alignment is strong",
+            next_actions_influence="suggest checking whether the current case matches the prior pattern",
+            reviewer_questions_influence="ask whether the current case matches the reviewed-case summary conditions",
+        )
+
+        validated = validate_retrieved_pattern_influence_policy(policy)
+        for field_name in RETRIEVED_PATTERN_INFLUENCE_REQUIRED_FIELDS:
+            self.assertIn(field_name, validated)
+        self.assertEqual(validated["source_type"], "reviewed_case_summary")
+
+    def test_influence_policy_supports_policy_snippet_artifact(self) -> None:
+        retrieval_artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="policy_context",
+            source_type="policy_snippet",
+            source_ref="POL-001",
+            source_summary="Tolerance policy for invoice-vs-PO mismatches.",
+            relevance_hint="useful_when=tolerance_exception",
+            source_payload={"policy_ref": "POL-001", "snippet": "Review tolerance threshold before routing."},
+            policy_ref="POL-001",
+        )
+        policy = build_retrieved_pattern_influence_policy(
+            retrieval_artifact=retrieval_artifact,
+            recommendation_influence="use the policy snippet to shape bounded recommendation context",
+            explanation_influence="reference the policy snippet in reviewer-facing explanation",
+            confidence_influence="clarify confidence when policy alignment is explicit",
+            next_actions_influence="suggest verifying the relevant policy anchor before final handling",
+            reviewer_questions_influence="ask whether the case meets the cited policy conditions",
+        )
+
+        self.assertEqual(policy["source_type"], "policy_snippet")
+        self.assertEqual(policy["source_ref"], "POL-001")
+
+    def test_influence_policy_supports_vendor_pattern_artifact(self) -> None:
+        retrieval_artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="vendor_pattern_context",
+            source_type="vendor_pattern",
+            source_ref="VENDOR-PATTERN-001",
+            source_summary="Supplier North often requires vendor-master review for mismatch cases.",
+            relevance_hint="useful_when=vendor_mismatch",
+            source_payload={"vendor_id": "V-200", "vendor_name": "Supplier North"},
+            vendor_ref="V-200",
+        )
+        policy = build_retrieved_pattern_influence_policy(
+            retrieval_artifact=retrieval_artifact,
+            recommendation_influence="suggest considering the vendor pattern as advisory routing context",
+            explanation_influence="note the vendor-pattern history in the bounded explanation",
+            confidence_influence="temper confidence when current facts diverge from the vendor pattern",
+            next_actions_influence="suggest confirming whether vendor-specific checks are still applicable",
+            reviewer_questions_influence="ask whether the vendor pattern still applies to this invoice",
+        )
+
+        self.assertEqual(policy["source_type"], "vendor_pattern")
+        self.assertIn("vendor_pattern:VENDOR-PATTERN-001", policy["influence_trace"])
+
+    def test_influence_policy_supports_routing_precedent_artifact(self) -> None:
+        retrieval_artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="routing_precedent_context",
+            source_type="routing_precedent",
+            source_ref="ROUTE-001",
+            source_summary="Vendor mismatch with verified profile routes to vendor_master_team.",
+            relevance_hint="useful_when=owner_routing_ambiguous",
+            source_payload={"owner": "vendor_master_team", "precedent_ref": "ROUTE-001"},
+            precedent_ref="ROUTE-001",
+        )
+        policy = build_retrieved_pattern_influence_policy(
+            retrieval_artifact=retrieval_artifact,
+            recommendation_influence="use routing precedent as advisory support for the recommended owner",
+            explanation_influence="identify the routing precedent in the reviewer-facing explanation",
+            confidence_influence="clarify confidence when routing precedent strongly aligns",
+            next_actions_influence="suggest validating the routing precedent against current facts",
+            reviewer_questions_influence="ask whether the routing precedent remains applicable here",
+        )
+
+        self.assertEqual(policy["source_type"], "routing_precedent")
+        self.assertEqual(policy["source_ref"], "ROUTE-001")
+
+    def test_influence_policy_missing_required_field_fails_clearly(self) -> None:
+        policy = {
+            "source_type": "policy_snippet",
+            "source_ref": "POL-001",
+            "influence_trace": "policy_snippet:POL-001",
+            "recommendation_influence": "bounded advisory use",
+            "explanation_influence": "cite policy",
+            "confidence_influence": "clarify confidence",
+            "next_actions_influence": "check policy anchor",
+        }
+
+        with self.assertRaisesRegex(ValueError, "reviewer_questions_influence"):
+            validate_retrieved_pattern_influence_policy(policy)
+
+    def test_influence_policy_rejects_over_authoritative_language(self) -> None:
+        retrieval_artifact = build_similar_case_retrieval_artifact(
+            retrieval_scope="policy_context",
+            source_type="policy_snippet",
+            source_ref="POL-001",
+            source_summary="Tolerance policy.",
+            relevance_hint="useful_when=tolerance_exception",
+            source_payload={"policy_ref": "POL-001", "snippet": "Review tolerance threshold before routing."},
+        )
+        policy = build_retrieved_pattern_influence_policy(
+            retrieval_artifact=retrieval_artifact,
+            recommendation_influence="auto-resolve the case from the retrieved policy",
+            explanation_influence="cite the policy in bounded form",
+            confidence_influence="clarify confidence",
+            next_actions_influence="suggest review steps",
+            reviewer_questions_influence="ask the reviewer whether the policy still applies",
+        )
+
+        with self.assertRaisesRegex(ValueError, "over-authoritative"):
+            validate_retrieved_pattern_influence_policy(policy)
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()

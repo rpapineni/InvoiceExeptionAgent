@@ -41,6 +41,12 @@ from invoice_exception_poc_a.memory.vendor import (
     build_vendor_exception_profile,
     validate_vendor_exception_profile,
 )
+from invoice_exception_poc_a.memory.influence import (
+    RETRIEVED_PATTERN_INFLUENCE_REQUIRED_FIELDS,
+    PocBRetrievedPatternInfluencePolicy,
+    build_retrieved_pattern_influence_policy,
+    validate_retrieved_pattern_influence_policy,
+)
 from invoice_exception_poc_a.memory.knowledge import (
     KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
     PocBKnowledgeMemory,
@@ -65,10 +71,12 @@ __all__ = [
     "PocBSessionMemory",
     "PocBSimilarCaseRetrievalArtifact",
     "PocBVendorExceptionProfile",
+    "PocBRetrievedPatternInfluencePolicy",
     "ALLOWED_RETRIEVAL_SOURCE_TYPES",
     "REVIEWED_CASE_WRITEBACK_REQUIRED_FIELDS",
     "REVIEWED_CASE_SUMMARY_REQUIRED_FIELDS",
     "REVIEWED_OUTCOME_PERSISTENCE_REQUIRED_SIGNALS",
+    "RETRIEVED_PATTERN_INFLUENCE_REQUIRED_FIELDS",
     "RETRIEVAL_CONTRACT_REQUIRED_FIELDS",
     "SESSION_MEMORY_REQUIRED_FIELDS",
     "VENDOR_EXCEPTION_PROFILE_REQUIRED_FIELDS",
@@ -76,6 +84,7 @@ __all__ = [
     "build_evaluation_memory",
     "build_knowledge_memory",
     "build_reviewed_case_summary",
+    "build_retrieved_pattern_influence_policy",
     "build_similar_case_retrieval_artifact",
     "build_session_memory",
     "build_vendor_exception_profile",
@@ -84,6 +93,7 @@ __all__ = [
     "validate_evaluation_memory",
     "validate_knowledge_memory",
     "validate_reviewed_case_summary",
+    "validate_retrieved_pattern_influence_policy",
     "validate_similar_case_retrieval_artifact",
     "validate_reviewed_case_writeback",
     "validate_session_memory",
