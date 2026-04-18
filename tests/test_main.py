@@ -66,16 +66,19 @@ from invoice_exception_poc_a.memory import (
     KNOWLEDGE_MEMORY_REQUIRED_FIELDS,
     MINIMUM_WRITEBACK_COMPATIBILITY_FIELDS,
     REVIEWED_CASE_WRITEBACK_REQUIRED_FIELDS,
+    REVIEWED_CASE_SUMMARY_REQUIRED_FIELDS,
     REVIEWED_OUTCOME_PERSISTENCE_REQUIRED_SIGNALS,
     SESSION_MEMORY_REQUIRED_FIELDS,
     build_decision_memory,
     build_evaluation_memory,
     build_knowledge_memory,
+    build_reviewed_case_summary,
     build_session_memory,
     persist_reviewed_outcome_to_decision_memory,
     validate_decision_memory,
     validate_evaluation_memory,
     validate_knowledge_memory,
+    validate_reviewed_case_summary,
     validate_reviewed_case_writeback,
     validate_session_memory,
 )
@@ -2652,6 +2655,107 @@ class PocAScaffoldTests(unittest.TestCase):
                 },
             )
 
+    def test_poc_b_reviewed_case_summary_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0019-poc-b-reviewed-case-summary-model.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_reviewed_case_summary_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0019-poc-b-reviewed-case-summary-model.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "concise, reusable, retrieval-friendly summary of a reviewed case",
+            "normalized_case_pattern",
+            "final_disposition",
+            "override_reason_summary",
+            "routing_precedent",
+            "vendor_specific_notes",
+            "confidence_hint",
+            "compatible with existing reviewed-outcome and decision-memory structures",
+            "free of raw chain-of-thought",
+            "free of verbose raw trace dumps",
+            "free of raw provider payloads",
+            "does not implement similar-case retrieval behavior, replay execution, learning-metric aggregation, or autonomous workflow behavior",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_reviewed_case_summary_supports_accept_as_is(self) -> None:
+        decision_memory = self._build_decision_memory_for_summary()
+        summary = build_reviewed_case_summary(decision_memory=decision_memory)
+
+        validated = validate_reviewed_case_summary(summary)
+        for field_name in REVIEWED_CASE_SUMMARY_REQUIRED_FIELDS:
+            self.assertIn(field_name, validated)
+        self.assertIn("missing_po->missing_po", summary["normalized_case_pattern"])
+        self.assertEqual(summary["override_reason_summary"], "accepted_as_recommended")
+        self.assertIn("confidence=medium", summary["confidence_hint"])
+
+    def test_reviewed_case_summary_supports_override_reason_in_bounded_form(self) -> None:
+        decision_memory = self._build_decision_memory_for_summary(
+            predicted_label="insufficient_information",
+            predicted_owner="exception_review_queue",
+            final_label="receiving_mismatch",
+            final_owner="exception_review_queue",
+            confidence="low",
+            decision_path="full_reasoning",
+            override_label="receiving_mismatch",
+            override_notes="Changed label after confirming receiving mismatch.",
+            reviewer_notes="Receipt mismatch confirmed.",
+        )
+        summary = build_reviewed_case_summary(decision_memory=decision_memory)
+
+        self.assertEqual(
+            summary["override_reason_summary"],
+            "Changed label after confirming receiving mismatch.",
+        )
+        self.assertIn("insufficient_information->receiving_mismatch", summary["normalized_case_pattern"])
+
+    def test_reviewed_case_summary_supports_vendor_notes_and_routing_precedent(self) -> None:
+        decision_memory = self._build_decision_memory_for_summary(
+            predicted_label="vendor_mismatch",
+            predicted_owner="exception_review_queue",
+            final_label="vendor_mismatch",
+            final_owner="vendor_master_team",
+            confidence="high",
+            decision_path="hybrid",
+            override_owner="vendor_master_team",
+            override_notes="Changed owner after vendor profile review.",
+            reviewer_notes="Vendor routing precedent confirmed.",
+            vendor_exception_profile={
+                "vendor_id": "V-200",
+                "vendor_name": "Supplier North",
+                "profile_scope": "vendor_exception_pattern",
+            },
+        )
+        summary = build_reviewed_case_summary(decision_memory=decision_memory)
+
+        self.assertEqual(summary["routing_precedent"], "vendor_master_team|path=hybrid")
+        self.assertEqual(summary["vendor_specific_notes"], "V-200|scope=vendor_exception_pattern")
+
+    def test_reviewed_case_summary_missing_required_input_fails_clearly(self) -> None:
+        decision_memory = self._build_decision_memory_for_summary()
+        del decision_memory["writeback_compatibility"]
+
+        with self.assertRaisesRegex(ValueError, "writeback_compatibility"):
+            build_reviewed_case_summary(decision_memory=decision_memory)
+
+    def test_reviewed_case_summary_rejects_unsafe_verbose_content(self) -> None:
+        summary = {
+            "normalized_case_pattern": "missing_po->missing_po|path=deterministic",
+            "final_disposition": "missing_po|owner=buyer_procurement",
+            "override_reason_summary": "accepted_as_recommended",
+            "routing_precedent": "buyer_procurement|path=deterministic",
+            "vendor_specific_notes": "prompt dump attached",
+            "confidence_hint": "confidence=medium|evidence_count=2",
+        }
+
+        with self.assertRaisesRegex(ValueError, "disallowed"):
+            validate_reviewed_case_summary(summary)
+
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
         request = FrontierJudgmentRequest(
@@ -3506,6 +3610,52 @@ class PocAScaffoldTests(unittest.TestCase):
         del payload["policy_rules"]
         with self.assertRaisesRegex(ValueError, "policy_rules"):
             validate_case_payload(payload)
+
+    def _build_decision_memory_for_summary(
+        self,
+        *,
+        predicted_label: str = "missing_po",
+        predicted_owner: str = "buyer_procurement",
+        final_label: str = "missing_po",
+        final_owner: str = "buyer_procurement",
+        confidence: str = "medium",
+        decision_path: str = "deterministic",
+        reviewer_notes: str = "Accepted as-is.",
+        override_label: str | None = None,
+        override_owner: str | None = None,
+        override_notes: str = "",
+        vendor_exception_profile: dict | None = None,
+    ) -> dict:
+        reviewer_feedback = build_reviewer_feedback(
+            predicted_label=predicted_label,
+            predicted_owner=predicted_owner,
+            accept_as_is=(predicted_label == final_label and predicted_owner == final_owner),
+            final_label=final_label,
+            final_owner=final_owner,
+            reviewer_notes=reviewer_notes,
+            ambiguous_or_novel_flag=False,
+            precedent_usefulness_flag=True,
+            override_label=override_label,
+            override_owner=override_owner,
+            override_notes=override_notes,
+        )
+        return persist_reviewed_outcome_to_decision_memory(
+            triage_output={
+                "case_id": "CASE-SUMMARY-001",
+                "exception_type": predicted_label,
+                "recommended_owner": predicted_owner,
+                "confidence": confidence,
+            },
+            reviewer_feedback=reviewer_feedback,
+            writeback_signals={
+                "decision_path": decision_path,
+                "evidence_sources": ["invoice", "po_summary"],
+                "rule_hits": ["case_pattern_rule"],
+                "similar_case_refs": ["CASE-HIST-001"],
+                "usage_summary": {"token_usage": None},
+            },
+            vendor_exception_profile=vendor_exception_profile,
+        )
 
     def _valid_minimal_payload(self) -> dict:
         return {

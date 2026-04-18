@@ -281,6 +281,19 @@ Reference ADR:
 
 - [ADR-0018-poc-b-writeback-validation-and-auditability.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0018-poc-b-writeback-validation-and-auditability.md)
 
+## PoC B Reviewed-Case Summary Model
+
+PoC B also defines a bounded reviewed-case summary model for concise, retrieval-friendly reuse of previously reviewed cases.
+
+- It derives summaries from validated decision-memory records rather than raw traces or freeform notes
+- It supports normalized case pattern, final disposition, override reason summary, routing precedent, vendor-specific notes, and confidence hints
+- It remains concise and structured, and does not expose chain-of-thought, raw trace dumps, or raw provider payloads
+- It does not imply similar-case retrieval, replay, learning metrics, or autonomous workflow behavior is already implemented
+
+Reference ADR:
+
+- [ADR-0019-poc-b-reviewed-case-summary-model.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0019-poc-b-reviewed-case-summary-model.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.
