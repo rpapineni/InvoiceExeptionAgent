@@ -177,6 +177,19 @@ Reference ADR:
 
 - [ADR-0010-poc-b-decision-path-telemetry-contract.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0010-poc-b-decision-path-telemetry-contract.md)
 
+## PoC B Bounded Trace Stages
+
+PoC B also defines bounded stage-level trace coverage so learning-oriented handling remains reviewable without becoming verbose or unsafe.
+
+- The trace stays compatible with the existing `stage` / `status` / `note` structure
+- PoC B stage coverage includes decision-path selection, telemetry capture, review handoff visibility, and writeback-pending visibility
+- Failure paths stay bounded and emit a failed stage at the relevant point
+- Trace notes remain concise and do not expose chain-of-thought, prompt contents, raw provider payloads, or hidden reasoning
+
+Reference ADR:
+
+- [ADR-0011-poc-b-bounded-trace-stages.md](/Users/rampapineni/Documents/Codex/Invoice Exception Agent PoCA/docs/adr/ADR-0011-poc-b-bounded-trace-stages.md)
+
 ## Output Validation
 
 PoC A validates the live output payload against the formal contract before returning it.

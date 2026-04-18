@@ -51,6 +51,7 @@ from invoice_exception_poc_a.evaluation.scoring import (
     create_all_score_records,
     create_score_record,
 )
+from invoice_exception_poc_a.audit.trace import POC_B_TRACE_STAGES, build_poc_b_trace_sequence
 from invoice_exception_poc_a.guardrails.policy import (
     UNSUPPORTED_CAPABILITIES,
     ScopeGuardrailError,
@@ -1725,6 +1726,60 @@ class PocAScaffoldTests(unittest.TestCase):
         del payload["usage_summary"]
         with self.assertRaisesRegex(ValueError, "usage_summary"):
             validate_decision_path_telemetry(payload)
+
+    def test_poc_b_bounded_trace_document_exists(self) -> None:
+        adr_path = ROOT / "docs" / "adr" / "ADR-0011-poc-b-bounded-trace-stages.md"
+        self.assertTrue(adr_path.is_file())
+
+    def test_poc_b_bounded_trace_docs_cover_required_boundaries(self) -> None:
+        readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+        adr_text = (ROOT / "docs" / "adr" / "ADR-0011-poc-b-bounded-trace-stages.md").read_text(
+            encoding="utf-8"
+        )
+        combined = readme_text + "\n" + adr_text
+        required_markers = [
+            "`stage`",
+            "`status`",
+            "`note`",
+            "`triage_start`",
+            "`decision_path_selection`",
+            "`decision_path_telemetry_capture`",
+            "`reviewer_outcome_pending`",
+            "`memory_writeback_pending`",
+            "bounded failed-stage entries",
+            "does not expose chain-of-thought",
+            "raw provider internals",
+            "Human-review posture remains explicit",
+        ]
+        for marker in required_markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, combined)
+
+    def test_poc_b_successful_trace_sequence_is_bounded_and_structured(self) -> None:
+        trace = build_poc_b_trace_sequence(selected_path="hybrid", human_review_required=True)
+        self.assertEqual([entry["stage"] for entry in trace], list(POC_B_TRACE_STAGES))
+        for entry in trace:
+            self.assertEqual(sorted(entry.keys()), ["note", "stage", "status"])
+            self.assertEqual(entry["status"], "completed")
+            self.assertIsInstance(entry["note"], str)
+            for forbidden_marker in ("chain-of-thought", "prompt", "raw_response", "output_text"):
+                self.assertNotIn(forbidden_marker, entry["note"].lower())
+        review_stage = next(entry for entry in trace if entry["stage"] == "reviewer_outcome_pending")
+        self.assertIn("human review", review_stage["note"].lower())
+
+    def test_poc_b_failed_trace_stage_is_emitted_at_relevant_stage(self) -> None:
+        trace = build_poc_b_trace_sequence(
+            selected_path="retrieval_assisted",
+            human_review_required=True,
+            failure_stage="decision_path_telemetry_capture",
+            failure_note="Decision-path telemetry capture failed bounded validation.",
+        )
+        self.assertEqual(
+            [entry["stage"] for entry in trace],
+            ["triage_start", "decision_path_selection", "decision_path_telemetry_capture"],
+        )
+        self.assertEqual(trace[-1]["status"], "failed")
+        self.assertIn("telemetry capture failed", trace[-1]["note"].lower())
 
     def test_stub_frontier_adapter_returns_bounded_placeholder_response(self) -> None:
         adapter = StubFrontierAdapter()
